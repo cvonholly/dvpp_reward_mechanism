@@ -6,8 +6,9 @@ import control as ct
 import pandas as pd
 
 from check_qualification import *
+from get_max_provision import get_reward_value
 
-plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Accent.colors)
+plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
 def create_curve(params, t_max, n_points=1000):
     t = np.linspace(0, t_max, n_points)
@@ -35,6 +36,12 @@ require_fcr = {(ti, ta): (0, 1/Dp), (ta, T_MAX_FCR): (1/Dp, 1/Dp)}
 require_fcr_max = {(ti, ta): (0, RP_MAX), (ta, T_MAX_FCR): (RP_MAX, RP_MAX)}
 ts_fcr_max, input_fcr_max = create_curve(require_fcr_max, t_max=T_MAX_FCR)
 _, curve_fcr_min = create_curve(require_fcr, t_max=T_MAX_FCR)  # minimum curve
+
+# FCR-D (finnish market)
+ti = 7.5
+T_MAX_FCR_D = 60
+require_fcr = {(0, ti): (0, 0.86*1/Dp), (ti, T_MAX_FCR_D): (0.86*1/Dp, 0.86*1/Dp), (ta, T_MAX_FCR): (1/Dp, 1/Dp)}
+
 
 # FFR-FCR
 # add two curves together
@@ -72,19 +79,19 @@ for tau, K, name in zip(taus, Kss, my_names):
     Gs[name] = G
 
 # build restricted battery model
-    p_BESS = {'tau': tau_BESS}  # maximum energy
-    def update(t, x, u, params={}):
-        tau = params.get('tau')
-        x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
-        x1 = x[0] #+ x[1]                  # energy state
-        return [x0, x1]
-    def output(t, x, u, params={}):
-        tau = params.get('tau')
-        return 1/tau * x[0] / (1 + t**1.2)
+p_BESS = {'tau': tau_BESS}  # maximum energy
+def update(t, x, u, params={}):
+    tau = params.get('tau')
+    x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
+    x1 = x[0] #+ x[1]                  # energy state
+    return [x0, x1]
+def output(t, x, u, params={}):
+    tau = params.get('tau')
+    return 1/tau * x[0] / (1 + t**1.2)
 
-    Gs['BESS'] = ct.NonlinearIOSystem(
-        update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
-    )
+Gs['BESS'] = ct.NonlinearIOSystem(
+    update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
+)
 
 if 'BESS' not in my_names: my_names.append('BESS')
 
@@ -187,6 +194,7 @@ t = np.linspace(0, T_MAX_FCR, 1000)
 
 ## SET PARAMS FOR DVPP
 # example: Solar PV LPF, Wind LPF and Battery HPF
+scales_hard_constrains = [1.2, 1.4, 1.6, 1.8, 2, 3]
 STATIC_PF = False   # use static instead of dynamic
 lpf_devices = {'PV': Gs['PV'], 'Wind': Gs['Wind']}
 bpf_devices = {}
@@ -207,11 +215,12 @@ PEAK_POWER = {}
 for name in my_names:
     # check if fulfills requirements
     g_cl = Closed_Loop_systems[name]
-    dict_out, energy_dict, get_peak_power = check_control_system([g_cl], input_ffr_fcr_max, [name], tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
-                         plot_hard_constrains=curve_ffr_fcr_min,
+    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                         scales_hard_constrains=scales_hard_constrains,
+                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
-    VALUE[(name)] = dict_out[name]
+    VALUE[(name)] = reward
     ENERGY[(name)] = energy_dict
     PEAK_POWER[(name)] = get_peak_power
 
@@ -221,44 +230,46 @@ for subset in itertools.combinations(my_names, 2):
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
                           Gs=Gs, PIs=PIs, tau_c=tau_c,
                           STATIC_PF=STATIC_PF)
-    dict_out, energy_dict, get_peak_power  = check_control_system([g_cl], input_ffr_fcr_max, [name], tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
-                         plot_hard_constrains=curve_ffr_fcr_min,
+    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                         scales_hard_constrains=scales_hard_constrains,
+                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
-    VALUE[(subset)] = dict_out[name]
-    ENERGY[(subset)] = energy_dict
-    PEAK_POWER[(subset)] = get_peak_power
+    VALUE[(name)] = reward
+    ENERGY[(name)] = energy_dict
+    PEAK_POWER[(name)] = get_peak_power
 
 for subset in itertools.combinations(my_names, 3):
     g_cl, name = DVPP_3_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_devices}, 
                           bpf_devices={k: Gs[k] for k in subset if k in bpf_devices}, 
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
                           Gs=Gs, PIs=PIs, tau_c=tau_c)
-    dict_out, energy_dict, get_peak_power = check_control_system([g_cl], input_ffr_fcr_max, [name], tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
-                         plot_hard_constrains=curve_ffr_fcr_min,
+    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                         scales_hard_constrains=scales_hard_constrains,
+                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
-    VALUE[(subset)] = dict_out[name]
-    ENERGY[(subset)] = energy_dict
-    PEAK_POWER[(subset)] = get_peak_power
+    VALUE[(name)] = reward
+    ENERGY[(name)] = energy_dict
+    PEAK_POWER[(name)] = get_peak_power
 
 for subset in itertools.combinations(my_names, 4):
     g_cl, name = DVPP_4_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_devices}, 
                           bpf_devices={k: Gs[k] for k in subset if k in bpf_devices}, 
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
                           Gs=Gs, PIs=PIs, tau_c=tau_c)
-    dict_out, energy_dict, get_peak_power = check_control_system([g_cl], input_ffr_fcr_max, [name], tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
-                         plot_hard_constrains=curve_ffr_fcr_min,
+    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                         scales_hard_constrains=scales_hard_constrains,
+                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
-    VALUE[(subset)] = dict_out[name]
-    ENERGY[(subset)] = energy_dict
-    PEAK_POWER[(subset)] = get_peak_power
+    VALUE[(name)] = reward
+    ENERGY[(name)] = energy_dict
+    PEAK_POWER[(name)] = get_peak_power
 
-for key, value in VALUE.items():
-    # convert True/False to 1/0 float
-    VALUE[key] = float(value)
-
+# reformat for shapely value
+VALUE ={tuple(k.replace(' ', '').split('+')): v for k, v in VALUE.items()}
+VALUE[()] = 0  # empty coaltion: value zero
 print('Value function from S -> U:')
 print(VALUE)
 
@@ -276,5 +287,6 @@ pd.DataFrame(PEAK_POWER).to_csv(f'data/{name}.csv')
 print('Shapely value:')
 SHAPELY_VALS = get_shapely_value(VALUE, my_names)
 print(SHAPELY_VALS)
+# reformat for saving
 name = 'shapely_value' if not STATIC_PF else 'shapely_value_static_pf'
 pd.DataFrame(SHAPELY_VALS, index=[0]).to_csv(f'data/{name}.csv')
