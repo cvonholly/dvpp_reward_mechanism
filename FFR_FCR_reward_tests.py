@@ -6,7 +6,16 @@ import control as ct
 import pandas as pd
 
 from check_qualification import *
-from get_max_provision import get_reward_value
+from src.dvpp_helper import DVPP_2_devices, DVPP_3_devices, DVPP_4_devices
+from plot_max_reward import plot_reward_value
+from src.game_theory_helpers import get_shapely_value
+
+"""
+
+in this script the reward is calculated for FFR-FCR provision,
+for the same numbers used in Verena's paper
+
+"""
 
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
@@ -197,8 +206,8 @@ t = np.linspace(0, T_MAX_FCR, 1000)
 scales_hard_constrains = [1.2, 1.4, 1.6, 1.8, 2, 3]
 STATIC_PF = False   # use static instead of dynamic
 lpf_devices = {'PV': Gs['PV'], 'Wind': Gs['Wind']}
-bpf_devices = {}
-hpf_devices = {'BESS': Gs['BESS'], 'SC': Gs['SC']}
+bpf_devices = {'BESS': Gs['BESS']}
+hpf_devices = {'SC': Gs['SC']}
 my_names = my_names   # specify otherwise if needed
 tau_c = 0   # 0.081
 
@@ -215,9 +224,9 @@ PEAK_POWER = {}
 for name in my_names:
     # check if fulfills requirements
     g_cl = Closed_Loop_systems[name]
-    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+    reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_ffr_fcr_max, curve_ffr_fcr_min,
+                                                            name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
                          scales_hard_constrains=scales_hard_constrains,
-                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
     VALUE[(name)] = reward
@@ -228,11 +237,11 @@ for subset in itertools.combinations(my_names, 2):
     g_cl, name = DVPP_2_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_devices}, 
                           bpf_devices={k: Gs[k] for k in subset if k in bpf_devices}, 
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
-                          Gs=Gs, PIs=PIs, tau_c=tau_c,
+                          pi_params=params, tau_c=tau_c,
                           STATIC_PF=STATIC_PF)
-    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+    reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_ffr_fcr_max, curve_ffr_fcr_min,
+                                                            name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
                          scales_hard_constrains=scales_hard_constrains,
-                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
     VALUE[(name)] = reward
@@ -243,10 +252,10 @@ for subset in itertools.combinations(my_names, 3):
     g_cl, name = DVPP_3_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_devices}, 
                           bpf_devices={k: Gs[k] for k in subset if k in bpf_devices}, 
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
-                          Gs=Gs, PIs=PIs, tau_c=tau_c)
-    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                          pi_params=params, tau_c=tau_c)
+    reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_ffr_fcr_max, curve_ffr_fcr_min,
+                                                            name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
                          scales_hard_constrains=scales_hard_constrains,
-                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
     VALUE[(name)] = reward
@@ -257,10 +266,10 @@ for subset in itertools.combinations(my_names, 4):
     g_cl, name = DVPP_4_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_devices}, 
                           bpf_devices={k: Gs[k] for k in subset if k in bpf_devices}, 
                           hpf_devices={k: Gs[k] for k in subset if k in hpf_devices},
-                          Gs=Gs, PIs=PIs, tau_c=tau_c)
-    reward, energy_dict, get_peak_power = get_reward_value(g_cl, input_ffr_fcr_max, name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
+                          pi_params=params, tau_c=tau_c)
+    reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_ffr_fcr_max, curve_ffr_fcr_min,
+                                                            name, tlim=[0, T_MAX_FCR], title=f'FFR-FCR Response of {name}; sat_lim={saturation_limits}',
                          scales_hard_constrains=scales_hard_constrains,
-                         min_hard_constrains=curve_ffr_fcr_min,
                          print_total_energy=True,
                          get_peak_power=True)
     VALUE[(name)] = reward
