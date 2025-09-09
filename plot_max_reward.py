@@ -69,7 +69,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     plt.plot(t, vref, 'b--', label='Reference', linewidth=2)
     
     # plot star at hard constraints
-    plt.plot(t, new_hard_constraints, '*',  color='red', markersize=1, label=f'Min Hard Constr at {final_scale}x')
+    plt.plot(t, new_hard_constraints, '*',  color='red', markersize=1, label=f'Min Hard Constr at {final_scale:.1f}x')
     plt.fill_between(t, 0 , new_hard_constraints, color='red', alpha=0.1)
 
     # Extract outputs and states properly
@@ -108,7 +108,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
 
     plt.subplot(2, 1, 1)
     plt.legend()
-    plt.title(title + f' {service_rating}MW, Reward: {reward:.1f}')
+    plt.title(title + f', Reward: {reward:.1f}')
     plt.grid(True)
     plt.xlabel('Time [s]')
     plt.ylabel('Output')
