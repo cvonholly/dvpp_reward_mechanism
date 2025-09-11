@@ -14,7 +14,7 @@ from check_qualification import sympy_to_tf, create_curve
 from get_max_reward import simulate_devices_and_limits
 
 # DVPP 2
-STATIC_PF = True # if False, use ADPF otherwise static PF
+STATIC_PF = False # if False, use ADPF otherwise static PF
 
 service_diff_FFR = 6  # difference of service compared to capacity: if service_diff = 2, then service rating is half of capacity
 service_diff_FCR = 3
@@ -133,47 +133,47 @@ input_ffrfcr_max = input_fcr_max + create_curve(require_ffr_max, t_max=T_MAX_FCR
 # from test_pi_contr import test_pi_saturation_individual_vs_dvpp
 # test_pi_saturation_individual_vs_dvpp(pi_params, IO_dict)
 
+if __name__ == '__main__':
+    print('Starting simulation for DVPP2 with devices:', IO_dict)
+    print('Using dynamic/static PF:', 'Static' if STATIC_PF else 'Dynamic')
 
-print('Starting simulation for DVPP2 with devices:', IO_dict)
-print('Using dynamic/static PF:', 'Static' if STATIC_PF else 'Dynamic')
+    # # FCR
+    # VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
+    #                               IO_dict=IO_dict,
+    #                               pi_params=pi_params,
+    #                               input_service_max=input_fcr_max,
+    #                               curve_service_min=curve_fcr_min,
+    #                               title='FCR Response of',
+    #                               service_diff=service_diff_FCR,
+    #                               T_MAX=T_MAX_FCR,
+    #                               save_path='pics/DVPP2/FCR',
+    #                               STATIC_PF = STATIC_PF
+    # )
+    # # FFR
+    # VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
+    #                               IO_dict=IO_dict,
+    #                               pi_params=pi_params,
+    #                               input_service_max=input_ffr_max,
+    #                               curve_service_min=curve_ffr_min,
+    #                               title='FFR Response of',
+    #                               T_MAX=T_MAX_FFR,
+    #                               service_diff=service_diff_FFR,
+    #                               save_path='pics/DVPP2/FFR',
+    #                               STATIC_PF = STATIC_PF
+    # )
 
-# # FCR
-# VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
-#                               IO_dict=IO_dict,
-#                               pi_params=pi_params,
-#                               input_service_max=input_fcr_max,
-#                               curve_service_min=curve_fcr_min,
-#                               title='FCR Response of',
-#                               service_diff=service_diff_FCR,
-#                               T_MAX=T_MAX_FCR,
-#                               save_path='pics/DVPP2/FCR',
-#                               STATIC_PF = STATIC_PF
-# )
-# # FFR
-# VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
-#                               IO_dict=IO_dict,
-#                               pi_params=pi_params,
-#                               input_service_max=input_ffr_max,
-#                               curve_service_min=curve_ffr_min,
-#                               title='FFR Response of',
-#                               T_MAX=T_MAX_FFR,
-#                               service_diff=service_diff_FFR,
-#                               save_path='pics/DVPP2/FFR',
-#                               STATIC_PF = STATIC_PF
-# )
-
-# FFR-FCR response
-VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
-                              IO_dict=IO_dict,
-                              pi_params=pi_params,
-                              input_service_max=input_ffrfcr_max,
-                              curve_service_min=curve_ffrfcr_min,
-                              title='FFR-FCR Response of',
-                              service_diff=service_diff_FFR_FCR,
-                              T_MAX=T_MAX_FCR,
-                              save_path='pics/DVPP2/FFR_FCR',
-                              STATIC_PF = STATIC_PF
-)
+    # FFR-FCR response
+    VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
+                                IO_dict=IO_dict,
+                                pi_params=pi_params,
+                                input_service_max=input_ffrfcr_max,
+                                curve_service_min=curve_ffrfcr_min,
+                                title='FFR-FCR Response of',
+                                service_diff=service_diff_FFR_FCR,
+                                T_MAX=T_MAX_FCR,
+                                save_path='pics/DVPP2/FFR_FCR',
+                                STATIC_PF = STATIC_PF
+    )
 
 """## BESS
 

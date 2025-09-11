@@ -7,7 +7,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
                          name: str, title='', tlim=(0, 60),
                          service_rating=1,
                          scales_hard_constrains=np.array([]),
-                         tol=5e-2,
+                         tol=1e-3,
                          save_path='pics/rewards',
                          print_total_energy=False,
                          get_peak_power=False):
