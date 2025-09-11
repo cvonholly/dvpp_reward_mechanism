@@ -1,0 +1,49 @@
+from check_qualification import create_curve
+
+def get_ffr(T_MAX_FFR=10, n_points=1000):
+    """
+    Create FFR service requirement curves
+    """
+    # FFR
+    Dp = 1   # set to 1 per unit
+    MP_max = 3 *  Dp  # set to 3 per unit * Dp
+    require_ffr = {(0, .7): (0, 0), (.7, 5): (1/Dp, 1/Dp), (5, 10): (1/Dp, 0)}
+    require_ffr_max = {(0, .7): (0, MP_max), (.7, 5): (MP_max, MP_max), (5, 10): (MP_max, 0)}
+    ts_ffr_max, input_ffr_max = create_curve(require_ffr_max, t_max=T_MAX_FFR, n_points=n_points)
+    _, curve_ffr_min = create_curve(require_ffr, t_max=T_MAX_FFR, n_points=n_points)
+    return ts_ffr_max, input_ffr_max, curve_ffr_min
+
+# FCR
+def get_fcr(T_MAX_FCR=60, n_points=1000):
+    """
+    Create FCR service requirement curves
+    """
+    ti, ta, = 2, 30
+    Dp = 1   # set to 1 per unit
+    RP_MAX = 3  # se to 3 per unit
+    require_fcr = {(ti, ta): (0, 1/Dp), (ta, 60): (1/Dp, 1/Dp)}
+    require_fcr_max = {(0, ta): (0, RP_MAX), (ta, 60): (RP_MAX, RP_MAX)}
+    ts_fcr_max, input_fcr_max = create_curve(require_fcr_max, t_max=T_MAX_FCR, n_points=n_points)
+    _, curve_fcr_min = create_curve(require_fcr, t_max=T_MAX_FCR, n_points=n_points)  # minimum curve
+    return ts_fcr_max, input_fcr_max, curve_fcr_min
+
+# FCR-D
+def get_fcr_d(T_MAX=60, n_points=1000):
+    D1 = .86  # at 7.5s
+    DMAX = D1 * 1.1  # maximum overshoot is 20% so reference is not allowed to be above 1.2*D1
+    require_fcr_d = {(0.05, 7.5): (0, D1), (7.5, T_MAX): (D1, D1)}
+    require_fcr_d_max = {(0, 7.5): (0, DMAX), (7.5, T_MAX): (DMAX, DMAX)}
+    ts_fcr_d_max, input_fcr_d_max = create_curve(require_fcr_d_max, t_max=T_MAX, n_points=n_points)
+    _, curve_fcr_d_min = create_curve(require_fcr_d, t_max=T_MAX, n_points=n_points)  # minimum curve
+    return ts_fcr_d_max, input_fcr_d_max, curve_fcr_d_min
+
+
+def get_ffr_fcr(T_MAX=60, n_points=1000):
+    """
+    Create combined FFR-FCR service requirement curves
+    """
+    ts_fcr_max, input_fcr_max, curve_fcr_min = get_fcr(T_MAX_FCR=T_MAX, n_points=n_points)
+    _, input_ffr_max, curve_ffr_min = get_ffr(T_MAX_FFR=T_MAX, n_points=n_points)
+    curve_ffrfcr_min = curve_fcr_min + curve_ffr_min
+    input_ffrfcr_max = input_fcr_max + input_ffr_max
+    return ts_fcr_max, input_ffrfcr_max, curve_ffrfcr_min

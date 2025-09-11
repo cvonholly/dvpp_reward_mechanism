@@ -2,6 +2,7 @@
 
 import itertools
 import math as mt
+import scipy.optimize as opt
 
 def get_shapely_value(v: dict, players: list) -> dict:
     """
@@ -34,3 +35,36 @@ def get_shapely_value(v: dict, players: list) -> dict:
                 shapley_values[p] += marginal_contribution * mt.factorial(k - 1) * mt.factorial(n - k) / mt.factorial(n)
     
     return shapley_values
+
+def get_nash_bargaining_solution(v: dict, players: list, bargaining_power={}) -> dict:
+    """
+    Nash bargaining solution for a coalition game.
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {tuple -> float}
+    players: list of players
+    bargaining_power (optional): bargaining power of each player
+        {player -> float}
+    """
+    # start by extracting status quo point: value of single players
+    status_quo = {p: v.get((p,), 0) for p in players}
+    # add constraint: sum of values must be less than value of grand coalition
+    grand_coalition = tuple(players)
+    total = v.get(grand_coalition, 0)
+    # construct scipy optimization problem
+    if not bargaining_power:
+        bargaining_power = {p: 1 for p in players}
+    def objective(x):
+        prod = 1
+        for i, p in enumerate(players):
+            prod *= (x[i] - status_quo[p]) ** bargaining_power[p]
+        return -prod  # negative for minimization
+
+    constraints = [{'type': 'eq', 'fun': lambda x: sum(x) - total}]
+    constraints += [{'type': 'ineq', 'fun': lambda x: x[i] - status_quo[p]} for i, p in enumerate(players)]
+    result = opt.minimize(objective, x0=list(status_quo.values()), constraints=constraints)
+    if not result.success:
+        print("ERROR: Optimization failed.")
+        raise ValueError("Optimization failed.")
+    nash_values = {p: result.x[i] for i, p in enumerate(players)}
+    return nash_values
