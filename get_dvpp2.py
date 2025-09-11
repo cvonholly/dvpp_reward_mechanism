@@ -14,7 +14,7 @@ from check_qualification import sympy_to_tf, create_curve
 from get_max_reward import simulate_devices_and_limits
 
 # DVPP 2
-STATIC_PF = True
+STATIC_PF = True # if False, use ADPF otherwise static PF
 
 service_diff_FFR = 6  # difference of service compared to capacity: if service_diff = 2, then service rating is half of capacity
 service_diff_FCR = 3

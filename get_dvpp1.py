@@ -3,7 +3,7 @@ This script is used to create more complicated plants and controllers
 
 Here, I construct the DVPPs used in Verena's ADPFs paper
 
-## DVPP 1
+DVPP 2
 """
 
 import control as ct
@@ -13,8 +13,8 @@ import sympy as sp
 from check_qualification import sympy_to_tf, create_curve
 from get_max_reward import simulate_devices_and_limits
 
-# DVPP 1
-STATIC_PF = False
+# DVPP 2
+STATIC_PF = True # if False, use ADPF otherwise static PF
 
 service_diff_FFR = 6  # difference of service compared to capacity: if service_diff = 2, then service rating is half of capacity
 service_diff_FCR = 3
@@ -22,14 +22,11 @@ service_diff_FFR_FCR = 4.5
 
 power_ratings_dict = {  # in MVA
     'DVPP': 250,
-    'Hydro': 125,
+    # 'Hydro': 250,
     'BESS': 125,
-    'SC': 125
-    # 'PV': 125,
-    # 'Wind': 125
+    'SC': 125,
+    'Wind': 125
 }
-
-Gs_diff = {}
 
 pi_params = {}
 
@@ -42,19 +39,22 @@ pi_params['PV'] = {"kp": 11.9, "ki": 157.9}
 pi_params['Wind'] = {"kp": 11.9, "ki": 118}
 pi_params['BESS'] = {"kp": 12, "ki": 2370}
 pi_params['SC'] = {"kp": 12, "ki": 2370}
-# pi_params["Hydro"] = {"kp": -0.0796, "ki": -0.09788}
-# negate hydro transfer function
-pi_params["Hydro"] = {"kp": 0.111495870206490, "ki": 0.003509203539823}
+pi_params["Hydro"] = {"kp": -0.0796, "ki": -0.09788}
 
 G_PV = ct.tf([K_PV], [tau_PV, 1], inputs=['u'], outputs=['y'])
 G_WTG = ct.tf([K_WTG], [tau_WTG, 1], inputs=['u'], outputs=['y'])
 G_BESS = ct.tf([K_BESS], [tau_BESS, 1], inputs=['u'], outputs=['y'])
 G_SC = ct.tf([1], [tau_SC, 1], inputs=['u'], outputs=['y'])
 
+Gs_diff = {
+    'PV': G_PV,
+    'Wind': G_WTG,
+    'BESS': G_BESS,
+    'SC': G_SC
+}
+
 # build restricted battery model
 p_BESS = {'tau': tau_BESS}  # maximum energy
-T_NORMAL_BESS = 45
-BESS_DECAY = 1/3
 def update(t, x, u, params={}):
     tau = params.get('tau')
     x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
@@ -62,9 +62,9 @@ def update(t, x, u, params={}):
     return [x0, x1]
 def output(t, x, u, params={}):
     tau = params.get('tau')
-    if t <= T_NORMAL_BESS:
+    if t <= 1:
         return 1/tau * x[0]  # no limitation
-    return 1/tau * x[0] / (1 + (t - T_NORMAL_BESS)**BESS_DECAY)
+    return 1/tau * x[0] / (1 + (t-1))
 
 G_BESS = ct.NonlinearIOSystem(
     update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
@@ -73,26 +73,17 @@ G_BESS = ct.NonlinearIOSystem(
 # hydro
 Rg, Rt = 0.03, 0.38
 taug, taur, tauw = 0.2, 5, 1
-tau_hydro_slowest = Rt/Rg*taur
 s = sp.symbols('s')
 
 def get_hydro_tf():
     T_hydro = -1/Rg / (taug*s + 1) * (taur*s+1) / (Rt/Rg*taur*s+1) * (1-tauw*s) / (1+1/2*tauw*s)
     return sympy_to_tf(sp.simplify(T_hydro))
 
-def get_hydro_simple_tf():
-    T_hydro = -1/Rg / (taug*s + 1) * (1-tauw*s) / (Rt/Rg*taur*s+1)
-    return sympy_to_tf(sp.simplify(T_hydro))
-
-T_hydro = -1 * get_hydro_tf() # negate and add typical delay, e.g. wind turbine dynamics
-# T_hydro = -1 * get_hydro_simple_tf() # negate and add typical delay, e.g. wind turbine dynamics
+T_hydro = get_hydro_tf() # * Gs['Wind'] # add typical delay
 T_hydro = ct.tf(T_hydro.num, T_hydro.den, inputs=['u'], outputs=['y'])
-# for ADPF, specify different transfer function
-Gs_diff['Hydro'] = ct.tf([1], [tau_hydro_slowest, 1])
 
 # build restricted supercap model
 p_SC = {'tau': tau_SC}  # maximum energy
-T_NORMAL = 10
 def update(t, x, u, params={}):
     tau = params.get('tau')
     x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
@@ -100,18 +91,16 @@ def update(t, x, u, params={}):
     return [x0, x1]
 def output(t, x, u, params={}):
     tau = params.get('tau')
-    if t <= T_NORMAL:
-        return 1/tau * x[0]  # no limitation
-    return 1/tau * x[0] / (1 + (t - T_NORMAL)**1.5)
+    return 1/tau * x[0] / (1 + t**3)
 
 G_SC = ct.NonlinearIOSystem(
     update, output, inputs=['u'], outputs=['y'], states=2, params=p_SC
 )
 
 # main dict: name -> (system, device_type, rating)
-IO_dict = {('BESS'): (G_BESS, 'bpf', power_ratings_dict['BESS']),
-           ('Hydro'): (T_hydro, 'lpf', power_ratings_dict['Hydro']),
-           ('SC'): (G_SC, 'hpf', power_ratings_dict['SC'])}
+IO_dict = {('SC'): (G_SC, 'hpf', power_ratings_dict['SC']),
+           ('BESS'): (G_BESS, 'bpf', power_ratings_dict['BESS']),
+           ('Wind'): (G_WTG, 'lpf', power_ratings_dict['Wind'])}
 
 # PI and saturation controller parameters
 for name in IO_dict.keys():
@@ -151,34 +140,33 @@ input_ffrfcr_max = input_fcr_max + create_curve(require_ffr_max, t_max=T_MAX_FCR
 # test_pi_saturation_individual_vs_dvpp(pi_params, IO_dict)
 
 
-print('Starting simulation for DVPP2 with devices:', IO_dict)
+print('Starting simulation for DVPP1 with devices:', IO_dict)
 print('Using dynamic/static PF:', 'Static' if STATIC_PF else 'Dynamic')
 
-# FCR
-VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
-                              IO_dict=IO_dict,
-                              pi_params=pi_params,
-                              input_service_max=input_fcr_max,
-                              curve_service_min=curve_fcr_min,
-                              title='FCR Response of',
-                              service_diff=service_diff_FCR,
-                              T_MAX=T_MAX_FCR,
-                              save_path='pics/DVPP1/FCR',
-                              STATIC_PF = STATIC_PF,
-                              Gs_diff=Gs_diff
-)
-# # FFR
+# # FCR
 # VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
 #                               IO_dict=IO_dict,
 #                               pi_params=pi_params,
-#                               input_service_max=input_ffr_max,
-#                               curve_service_min=curve_ffr_min,
-#                               title='FFR Response of',
-#                               T_MAX=T_MAX_FFR,
-#                               service_diff=service_diff_FFR,
-#                               save_path='pics/DVPP1/FFR',
+#                               input_service_max=input_fcr_max,
+#                               curve_service_min=curve_fcr_min,
+#                               title='FCR Response of',
+#                               service_diff=service_diff_FCR,
+#                               T_MAX=T_MAX_FCR,
+#                               save_path='pics/DVPP1/FCR',
 #                               STATIC_PF = STATIC_PF
 # )
+# FFR
+VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
+                              IO_dict=IO_dict,
+                              pi_params=pi_params,
+                              input_service_max=input_ffr_max,
+                              curve_service_min=curve_ffr_min,
+                              title='FFR Response of',
+                              T_MAX=T_MAX_FFR,
+                              service_diff=service_diff_FFR,
+                              save_path='pics/DVPP1/FFR',
+                              STATIC_PF = STATIC_PF
+)
 
 # # FFR-FCR response
 # VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
@@ -190,7 +178,8 @@ VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
 #                               service_diff=service_diff_FFR_FCR,
 #                               T_MAX=T_MAX_FCR,
 #                               save_path='pics/DVPP1/FFR_FCR',
-#                               STATIC_PF = STATIC_PF
+#                               STATIC_PF = STATIC_PF,
+#                               Gs_diff=Gs_diff
 # )
 
 """## BESS

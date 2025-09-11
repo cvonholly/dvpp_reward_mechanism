@@ -329,11 +329,11 @@ def DVPP_3_devices(lpf_devices, bpf_devices, hpf_devices,
         # every device is treated equally
         theta_i = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
         for name, g in lpf_devices.items():
-            mks[name] = 1 / theta_i
+            mks[name] = ct.tf([1 / theta_i], [1])
         for name, g in bpf_devices.items():
-            mks[name] = 1 / theta_i
+            mks[name] = ct.tf([1 / theta_i], [1])
         for name, g in hpf_devices.items():
-            mks[name] = 1 / theta_i
+            mks[name] = ct.tf([1 / theta_i], [1])
 
     # next, build the system assuming 3 devices
     name1, name2, name3 = [k for k in lpf_devices.keys()] + [k for k in bpf_devices.keys()] + [k for k in hpf_devices.keys()]
