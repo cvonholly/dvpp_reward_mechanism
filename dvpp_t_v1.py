@@ -6,17 +6,20 @@ The reward mechanisms are evaluated, namely Shapely Value and Nash Bargaining So
 
 Setup:
 - Finnish Grid
-- Services: FFR, FCR-D up and both
+- Services: FFR, FCR, FCR-D up and combination
 - Device and Size:
-    - 1 MW Solar PV (LPF)
-    - 1 MW Wind Turbine (LPF)
-    - 1 MW / 1 MWh Battery (HPF)
+    - Solar PV (LPF)
+    - Wind Turbine (LPF)
+    - Battery (HPF/BPF)
+    - Hydro (LPF)
+    - Supercapacitor (HPF)
 - DC gains:
     - Solar PV: time varying based on avg. production
     - Wind Turbine: time varying based on avg. production
-    - Battery: 1 until energy limit reached, then 0
+    - Battery: 1 until energy limit reached, then decaying fast
+    - Hydro: constant
+    - Supercapacitor: 1 until energy limit reached, then decaying fast
 - Time Frame: 1 Week
-
 """
 
 import control as ct
@@ -47,15 +50,11 @@ power_ratings_dict = {  # in MVA
 
 all_shapely_values = []
 all_values = []
-SERVICE = 'FCR'
+SERVICE = 'FFR-FCR'  # options: 'FCR', 'FFR', 'FFR-FCR'
 my_path = 'pics/varying/FCR' if SERVICE=='FCR' else 'pics/varying/FFR' if SERVICE=='FFR' else 'pics/varying/FFR_FCR'
 service_diff = 0.1  # minimum fraction of capacity that can be provided as service (1MW)
 
 my_names = list(power_ratings_dict.keys())
-
-# set colors
-cmap = plt.colormaps['tab20']
-color_dict = {k: (cmap((i)*2), cmap((i)*2+1)) for i, k in enumerate(my_names)}
 
 pi_params = {}
 

@@ -6,17 +6,20 @@ The reward mechanisms are evaluated, namely Shapely Value and Nash Bargaining So
 
 Setup:
 - Finnish Grid
-- Services: FFR, FCR-D up and both
+- Services: FFR, FCR, FCR-D up and combination
 - Device and Size:
-    - 1 MW Solar PV (LPF)
-    - 1 MW Wind Turbine (LPF)
-    - 1 MW / 1 MWh Battery (HPF)
+    - Solar PV (LPF)
+    - Wind Turbine (LPF)
+    - Battery (HPF/BPF)
+    - Hydro (LPF)
+    - Supercapacitor (HPF)
 - DC gains:
     - Solar PV: time varying based on avg. production
     - Wind Turbine: time varying based on avg. production
-    - Battery: 1 until energy limit reached, then 0
+    - Battery: 1 until energy limit reached, then decaying fast
+    - Hydro: constant
+    - Supercapacitor: 1 until energy limit reached, then decaying fast
 - Time Frame: 1 Week
-
 """
 
 import control as ct
@@ -39,7 +42,7 @@ wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  # time se
 power_ratings_dict = {  # in MVA
     'Hydro': 2,
     'BESS': 1,    # in 2:3 to solar PV: 8cent / kWh
-    'SC': .2
+    'SC': 1
     # 'PV': 3,      # 5cent / kWh
     # 'Wind': 1.5   # 7cent / kWh
                   # s
@@ -48,22 +51,15 @@ power_ratings_dict = {  # in MVA
 
 all_shapely_values = []
 all_values = []
-SERVICE = 'FCR'
-my_path = 'pics/v2/FCR' if SERVICE=='FCR' else 'pics/v2/FFR' if SERVICE=='FFR' else 'pics/v2/FFR_FCR'
+SERVICE = 'FCR-D'  # options: 'FCR', 'FFR', 'FFR-FCR', 'FCR-D'
+my_path = 'pics/v2/FCR' if SERVICE=='FCR' else 'pics/v2/FFR' if SERVICE=='FFR' else 'pics/v2/FFR_FCR' if SERVICE=='FFR-FCR' else 'pics/v2/FCR_D'
 service_diff = 0.1  # minimum fraction of capacity that can be provided as service (1MW)
 
 my_names = list(power_ratings_dict.keys())
-
-# set colors
-cmap = plt.colormaps['tab20']
-color_dict = {k: (cmap((i)*2), cmap((i)*2+1)) for i, k in enumerate(my_names)}
-
 pi_params = {}
-
 tau_BESS = 0.1
 tau_SC = 0.01
 # K_BESS = 1.5 ?
-
 
 # now select Sx scenarios where we simulate wind solar and battery
 Sx = 1  # number of scenarios
@@ -71,8 +67,11 @@ selected_indices = np.random.randint(0, high=len(wind_solar_dc_gains), size=Sx)
 
 # get control systems
 G_Hydro, pi_params_hydro, hydro_t_constant = get_hydro_tf()
-G_BESS = get_bess_io_sys(tau_BESS=tau_BESS)
+# todo: corret me
+G_BESS = get_bess_io_sys(tau_BESS=tau_BESS, t_drop=30)
 G_SC = get_sc_io_sys(tau_SC=tau_SC)
+# G_BESS = ct.tf([1], [tau_BESS, 1])
+# G_SC = ct.tf([1], [tau_SC, 1])
 
 pi_params['Hydro'] = pi_params_hydro
 pi_params['BESS'] = {"kp": 12, "ki": 2370}
@@ -84,6 +83,10 @@ Gs_diff = {
     'BESS': ct.tf([1], [tau_BESS, 1]),
     'SC': ct.tf([1], [tau_SC, 1]),
 }
+
+# set price to average non-zero price
+price = prices[prices>0].mean()
+price = price.values[0] if SERVICE=='FFR' else price.values[1]
 
 # run scenario simulations
 for i, idx in enumerate(selected_indices):
@@ -108,8 +111,9 @@ for i, idx in enumerate(selected_indices):
     elif SERVICE == 'FFR-FCR':
         T_MAX = 60
         ts, input, requirement_curve = get_ffr_fcr()
-
-    price = prices.iloc[idx, 0] if SERVICE=='FFR' else prices.iloc[idx, 1]
+    elif SERVICE == 'FCR-D':
+        T_MAX = 60
+        ts, input, requirement_curve = get_fcr_d()
 
     # service response
     VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(

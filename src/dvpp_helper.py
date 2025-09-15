@@ -11,7 +11,7 @@ def get_DVPP(IO_dict,
             vref, min_hard_constrains,
             title='', tlim=(0, 60),
             scales_hard_constrains=np.array([]),
-            tol=1e-4,
+            tol=1e-3,
             save_path='pics/rewards',
             print_total_energy=False,
             get_peak_power=False,
@@ -42,25 +42,37 @@ def get_DVPP(IO_dict,
     bpf_devices = {k: v[0] for k, v in IO_dict.items() if v[1] == 'bpf'}
     hpf_devices = {k: v[0] for k, v in IO_dict.items() if v[1] == 'hpf'}
 
+    mks = {}
+    Gs_sum = ct.tf([0], [1])   # set sum to zero transfer function
+    if len(lpf_devices)==0 and len(bpf_devices)!=0:   
+        # make one bpf device to an lpf device
+        bpf_name, bpf_g = list(bpf_devices.items())[0]
+        lpf_devices[bpf_name] = bpf_g
+        # also add to IO_dict
+        IO_dict[bpf_name] = (bpf_g, 'lpf', IO_dict[bpf_name][2])
+        del bpf_devices[bpf_name]
+    if len(lpf_devices)==0 and len(hpf_devices)!=0:
+        # make one hpf device to an lpf device
+        hpf_name, hpf_g = list(hpf_devices.items())[0]
+        lpf_devices[hpf_name] = hpf_g
+        # also add to IO_dict
+        IO_dict[hpf_name] = (hpf_g, 'lpf', IO_dict[hpf_name][2])
+        del hpf_devices[hpf_name]
+    if len(lpf_devices)==1 and len(hpf_devices)==0:
+        # make one bpf device to an hpf device
+        bpf_name, bpf_g = list(bpf_devices.items())[0]
+        hpf_devices[bpf_name] = bpf_g
+        # also add to IO_dict
+        IO_dict[bpf_name] = (bpf_g, 'hpf', IO_dict[bpf_name][2])
+        del bpf_devices[bpf_name]
+
+    # print devicees and type
+    print(f'LPF devices: {lpf_devices}, BPF devices: {bpf_devices}, HPF devices: {hpf_devices}')
+    
+    # set devices and rating
     n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
     sum_service_rating = sum([v[2] for v in IO_dict.values() if v[1] == 'lpf'])
 
-    mks = {}
-    Gs_sum = ct.tf([0], [1])   # set sum to zero transfer function
-    if len(lpf_devices)==0:
-        if len(bpf_devices)!=0:
-            # make one bpf device to an lpf device
-            bpf_name, bpf_g = list(bpf_devices.items())[0]
-            lpf_devices[bpf_name] = bpf_g
-            del bpf_devices[bpf_name]
-        elif len(hpf_devices)!=0:
-            # make one hpf device to an lpf device
-            hpf_name, hpf_g = list(hpf_devices.items())[0]
-            lpf_devices[hpf_name] = hpf_g
-            del hpf_devices[hpf_name]
-        else:
-            print(f'BPF devices: {bpf_devices}, HPF devices: {hpf_devices}')
-            raise ValueError('At least one LPF device is needed')
     if not STATIC_PF:
         theta_i = 1 / len(lpf_devices)
         for name, g in lpf_devices.items():
@@ -94,7 +106,7 @@ def get_DVPP(IO_dict,
     t = np.linspace(tlim[0], tlim[1], n_points)
     x0 = [0, 0]
     service_rating = max(sum_service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
-    vref, min_hard_constrains = service_rating * vref, service_rating * min_hard_constrains
+    vref = service_rating * vref   # sacel by rating
     for k, name, G in zip(range(n_devices), names, all_devices):
         # each plant has their own desired transfer function, namely mks[name] from y -> y_i
         T_des = mks[name]
@@ -112,7 +124,7 @@ def get_DVPP(IO_dict,
         G.output_labels = [f'y{k+1}']
         G.name = f'G_{name}'
 
-        closed_loop = ct.interconnect([T_des, error, PI, G], inputs=['yref'], outputs=[f'y{k+1}', f'u{k+1}'], name=f'closed_loop_{name}')
+        closed_loop = ct.interconnect([T_des, error, PI, G], inputs=['yref'], outputs=[f'y{k+1}', f'ref_y{k+1}', f'u{k+1}'], name=f'closed_loop_{name}')
                                     #   connections=[
                                     #     [f'err_{name}.ref_y{k+1}', f'T_des_{name}.ref_y{k+1}'],
                                     #     [f'PI_{name}.e{k+1}', f'err_{name}.e{k+1}'],
@@ -128,13 +140,13 @@ def get_DVPP(IO_dict,
 
     # check if unit fulfills test
     reward = -3 * service_rating * price * scales_hard_constrains[0]  # penalty if not fulfilling requirements
-    new_hard_constraints = min_hard_constrains * scales_hard_constrains[0]
+    new_hard_constraints = service_rating * min_hard_constrains * scales_hard_constrains[0]
     for scale in scales_hard_constrains:
-        diff = tol + plant_output - new_hard_constraints
+        diff = tol + plant_output - service_rating * min_hard_constrains * scale
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
             reward = service_rating * scale * price
-            new_hard_constraints = min_hard_constrains * scale
+            new_hard_constraints = service_rating * min_hard_constrains * scale
         else:
             # failed the test
             break
@@ -160,9 +172,12 @@ def get_DVPP(IO_dict,
     for name in names:
         plt.subplot(2, 1, 1)
         plt.plot(t, responses[name].outputs[0], linewidth=1.5, label=f'{name} at {IO_dict[name][2]:.1f}')
+        # plot reference in same color but dimmer
+        color = plt.gca().lines[-1].get_color()
+        plt.plot(t, responses[name].outputs[1], '--', linewidth=1.5, label=f'{name} reference', color=color, alpha=0.5)
 
         plt.subplot(2, 1, 2)
-        plt.plot(t, responses[name].outputs[1], '--', label=f'{name} PI output')
+        plt.plot(t, responses[name].outputs[-1], '--', label=f'{name} PI output', color=color)
 
         if print_total_energy:
             energy = np.trapz(responses[name].outputs[0], x=t)

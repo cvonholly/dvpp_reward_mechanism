@@ -29,7 +29,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               title: str='',
                               T_MAX=60,
                               save_path='pics/FFR',
-                              service_diff = 0.3, # derating to ensure some margin
+                              service_diff = 0.1, # derating to ensure some margin
                               STATIC_PF = False,   # use static instead of dynamic
                               Gs_diff = {},  # specify different transfer functions for some devices
                               save_plots = True,
@@ -82,10 +82,6 @@ def simulate_devices_and_limits(IO_dict: dict,
     # example: Solar PV LPF, Wind LPF and Battery HPF
       # scales of the reference/hard constraints to test
     pf_name = 'Static PF' if STATIC_PF else 'Dynamic PF'
-
-    lpf_device_names = {name for name in my_names if IO_dict[name][1] == 'lpf'}
-    bpf_device_names = {name for name in my_names if IO_dict[name][1] == 'bpf'}
-    hpf_device_names = {name for name in my_names if IO_dict[name][1] == 'hpf'}
     my_names = my_names   # specify otherwise if needed
     tau_c = 0.081             # 0.081 in Verena paper
 
@@ -121,14 +117,14 @@ def simulate_devices_and_limits(IO_dict: dict,
                             vref=input_service_max, min_hard_constrains=curve_service_min,
                             scales_hard_constrains=scales_hard_constrains,
                             tlim=[0, T_MAX],
-                            print_total_energy=True,
-                            get_peak_power=True,
+                            print_total_energy=False,
+                            get_peak_power=False,
                             save_plots=save_plots,
                             save_path=save_path,
                             tau_c=tau_c,
                             title=f'{title} {"+".join(subset)} with {pf_name} Scenario {x_scenario}',
                             STATIC_PF=STATIC_PF,
-                            price=price
+                            price=price,
                             )
 
             VALUE[subset] = reward

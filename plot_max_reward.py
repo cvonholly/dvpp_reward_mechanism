@@ -106,7 +106,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')
-    plt.title(title + f', Reward: {reward:.2f}, at {service_rating:.1f}MW')
+    plt.title(title + f', Reward: {reward:.2f}€, at {service_rating:.1f}MW')
     plt.grid(True)
     plt.xlabel('Time [s]')
     plt.ylabel('Output')

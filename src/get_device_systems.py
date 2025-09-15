@@ -1,5 +1,6 @@
 import sympy as sp
 import control as ct
+import numpy as np
 
 from src.get_controllers import sympy_to_tf
 
@@ -44,10 +45,7 @@ def get_bess_io_sys(tau_BESS=0.1, t_drop=7, drop_exp=1.2):
         return [x0, x1]
     
     def output(t, x, u, params={}):
-        if t <= params.get('t_drop'):
-            return 1/params.get('tau') * x[0]  # no limitation
-        else:
-            return 1/params.get('tau') * x[0] / ((t-params.get('t_drop'))**params.get('drop_exp'))
+        return 1/params.get('tau') * x[0] / (max(1, t-params.get('t_drop'))**params.get('drop_exp'))
 
     return ct.NonlinearIOSystem(
         update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
@@ -68,10 +66,7 @@ def get_sc_io_sys(tau_SC=0.1, t_drop=1, drop_exp=2):
         return [x0, x1]
     
     def output(t, x, u, params={}):
-        if t <= params.get('t_drop'):
-            return 1/params.get('tau') * x[0]  # no limitation
-        else:
-            return 1/params.get('tau') * x[0] / ((t-params.get('t_drop'))**params.get('drop_exp'))
+        return 1/params.get('tau') * x[0] / (max(1, t-params.get('t_drop'))**params.get('drop_exp'))
 
     return ct.NonlinearIOSystem(
         update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
