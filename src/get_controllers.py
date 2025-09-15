@@ -1,5 +1,6 @@
 import control as ct
 import numpy as np
+import sympy as sp
  
 def pi_update(t, x, u, params={}):
     # Get the controller parameters that we need
@@ -43,3 +44,17 @@ def get_pi_controller(params):
         pi_update, pi_output, name='control',
         inputs=['e'], outputs=['u'], states=2,
         params=params)
+
+def sympy_to_tf(T_sym, s=sp.symbols('s')):
+    """
+    Convert a SymPy rational function T(s) into a python-control TransferFunction.
+    """
+    num, den = sp.fraction(sp.together(T_sym))   # separate numerator and denominator
+    num_poly = sp.Poly(sp.expand(num), s)
+    den_poly = sp.Poly(sp.expand(den), s)
+
+    # coefficients in descending powers of s
+    num_coeffs = [float(c) for c in num_poly.all_coeffs()]
+    den_coeffs = [float(c) for c in den_poly.all_coeffs()]
+
+    return ct.tf(num_coeffs, den_coeffs)

@@ -49,7 +49,7 @@ def get_nash_bargaining_solution(v: dict, players: list, bargaining_power={}) ->
         {player -> float}
     """
     # start by extracting status quo point: value of single players
-    status_quo = {p: v.get((p,), 0) for p in players}
+    status_quo = {p: v.get((p), 0) for p in players}
     # add constraint: sum of values must be less than value of grand coalition
     grand_coalition = tuple(players)
     total = v.get(grand_coalition, 0)

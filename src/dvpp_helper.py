@@ -11,15 +11,16 @@ def get_DVPP(IO_dict,
             vref, min_hard_constrains,
             title='', tlim=(0, 60),
             scales_hard_constrains=np.array([]),
-            tol=1e-3,
+            tol=1e-4,
             save_path='pics/rewards',
             print_total_energy=False,
             get_peak_power=False,
             save_plots=True,
-            tau_c=0,
+            tau_c=0.001,
             STATIC_PF=False,
             min_service_rating=0.1,
-            n_points=1000):
+            n_points=1000,
+            price=1):
     """
     IO_dict: dict of IO systems with entries: 
         {(name): (ct.tf(...), device_type, rating)} 
@@ -34,6 +35,7 @@ def get_DVPP(IO_dict,
     scales_hard_constrains: values for scaling hard constraints
     T_MAX: time horizon of the service in seconds
     save_path: for the plots
+    price: price of the service in EUR/MW
     """
     # scale reference and hard constraints to service rating minus tollerance
     lpf_devices = {k: v[0] for k, v in IO_dict.items() if v[1] == 'lpf'}
@@ -99,7 +101,6 @@ def get_DVPP(IO_dict,
         T_des.name = f'T_des_{name}'
         T_des.input_labels = ['yref']
         T_des.output_labels = [f'ref_y{k+1}']
-        # error = ct.summing_junction(['yref', '-y'], 'e')  # error signal
         error = ct.summing_junction([f'ref_y{k+1}', f'-y{k+1}'], f'e{k+1}', name=f'err_{name}')  # error signal
 
         PI = get_pi_controller(params=pi_params[name])  # get PI controller
@@ -111,12 +112,12 @@ def get_DVPP(IO_dict,
         G.output_labels = [f'y{k+1}']
         G.name = f'G_{name}'
 
-        closed_loop = ct.interconnect([T_des, error, PI, G], inputs=['yref'], outputs=[f'y{k+1}', f'u{k+1}'], name=f'closed_loop_{name}',
-                                      connections=[
-                                        [f'err_{name}.ref_y{k+1}', f'T_des_{name}.ref_y{k+1}'],
-                                        [f'PI_{name}.e{k+1}', f'err_{name}.e{k+1}'],
-                                        [f'G_{name}.u{k+1}', f'PI_{name}.u{k+1}'],
-                                        [f'err_{name}.y{k+1}', f'G_{name}.y{k+1}']])
+        closed_loop = ct.interconnect([T_des, error, PI, G], inputs=['yref'], outputs=[f'y{k+1}', f'u{k+1}'], name=f'closed_loop_{name}')
+                                    #   connections=[
+                                    #     [f'err_{name}.ref_y{k+1}', f'T_des_{name}.ref_y{k+1}'],
+                                    #     [f'PI_{name}.e{k+1}', f'err_{name}.e{k+1}'],
+                                    #     [f'G_{name}.u{k+1}', f'PI_{name}.u{k+1}'],
+                                    #     [f'err_{name}.y{k+1}', f'G_{name}.y{k+1}']])
 
         response_i = ct.input_output_response(closed_loop, t, vref, x0,
                                         solve_ivp_method='LSODA')
@@ -126,13 +127,13 @@ def get_DVPP(IO_dict,
     plant_output = np.sum([responses[n].outputs[0] for n in names], axis=0) if responses[names[0]].outputs.ndim > 1 else np.sum([responses[n].outputs for n in names], axis=0)
 
     # check if unit fulfills test
-    reward = -1  # penalty if not fulfilling requirements, todo: implement better
+    reward = -3 * service_rating * price * scales_hard_constrains[0]  # penalty if not fulfilling requirements
     new_hard_constraints = min_hard_constrains * scales_hard_constrains[0]
     for scale in scales_hard_constrains:
         diff = tol + plant_output - new_hard_constraints
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
-            reward = service_rating * scale
+            reward = service_rating * scale * price
             new_hard_constraints = min_hard_constrains * scale
         else:
             # failed the test
@@ -150,12 +151,6 @@ def get_DVPP(IO_dict,
     # plot star at hard constraints
     plt.plot(t, new_hard_constraints, '*',  color='red', markersize=1, label='Min Hard Constraint')
     plt.fill_between(t, 0 , new_hard_constraints, color='red', alpha=0.1)
-
-    # Extract outputs and states properly
-    # labels = [responses[n].output_labels for n in names]
-    # unit_names = [name1 for _ in responses[names[0]].output_labels] + [name2 for _ in responses[names[1]].output_labels]
-    # all_ratings = [IO_dict[name1][2] for _ in responses[names[0]].output_labels] + [IO_dict[name2][2] for _ in responses[names[1]].output_labels]
-    # response = np.vstack((responses[names[0]].outputs, responses[names[1]].outputs))   # combine responses
 
     plt.subplot(2, 1, 1)
     # first, plot total ouput
@@ -182,7 +177,7 @@ def get_DVPP(IO_dict,
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')
-    final_title = title + f', Reward: {reward:.2f}, at {service_rating:.1f}MW'
+    final_title = title + f', Reward: {reward:.2f}€, at {service_rating:.1f}MW'
     plt.title(final_title)
     plt.grid(True)
     plt.xlabel('Time [s]')

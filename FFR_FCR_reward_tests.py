@@ -131,7 +131,7 @@ params["SC"] = params['BESS']   # set same PI as for BESS
 
 # def get_hydro_tf():
 #     T_hydro = -1/Rg / (taug*s + 1) * (taur*s+1) / (Rt/Rg*taur*s+1) * (1-tauw*s) / (1+1/2*tauw*s)
-#     return sympy_to_tf(sp.simplify(T_hydro))
+    # return sympy_to_tf(sp.simplify(T_hydro))
 
 # T_hydro = get_hydro_tf() * Gs['Wind'] # add typical delay
 # T_hydro = ct.tf(T_hydro.num, T_hydro.den, inputs=['u'], outputs=['y'])

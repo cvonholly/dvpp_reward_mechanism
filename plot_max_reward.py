@@ -12,7 +12,8 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
                          print_total_energy=False,
                          get_peak_power=False,
                          save_plots=True,
-                         min_service_rating=1):
+                         min_service_rating=1,
+                         price=1):
     """
     gets the maximum the power plant can output and outputs the result
 
@@ -47,16 +48,14 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     plant_output = response.outputs[0] if response.outputs.ndim > 1 else response.outputs
     
     # check if unit fulfills test
-    reward = -1  # penalty if not fulfilling requirements, todo: implement better
-    final_scale = 0
+    reward = -3 * service_rating * price  # penalty if not fulfilling requirements, todo: implement better
     new_hard_constraints = min_hard_constrains * scales_hard_constrains[0]
     for scale in scales_hard_constrains:
         diff = tol + plant_output - new_hard_constraints
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
-            reward = service_rating * scale
+            reward = service_rating * scale * price
             new_hard_constraints = min_hard_constrains * scale
-            final_scale = scale
         else:
             # failed the test
             break

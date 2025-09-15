@@ -34,7 +34,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               Gs_diff = {},  # specify different transfer functions for some devices
                               save_plots = True,
                               save_data = True,
-                              x_scenario = 0  # specify scenario if needed from 1...Sx
+                              x_scenario = 0,  # specify scenario if needed from 1...Sx
+                              price = 1
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -50,6 +51,7 @@ def simulate_devices_and_limits(IO_dict: dict,
     scales_hard_constrains: values for scaling hard constraints
     T_MAX: time horizon of the service in seconds
     save_path: for the plots
+    price: price of the service in EUR/MW
 
     OUTPUT:
         plots of the responses
@@ -85,7 +87,7 @@ def simulate_devices_and_limits(IO_dict: dict,
     bpf_device_names = {name for name in my_names if IO_dict[name][1] == 'bpf'}
     hpf_device_names = {name for name in my_names if IO_dict[name][1] == 'hpf'}
     my_names = my_names   # specify otherwise if needed
-    tau_c = 0             # 0.081 in Verena paper
+    tau_c = 0.081             # 0.081 in Verena paper
 
 
     # create value function
@@ -103,7 +105,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                             scales_hard_constrains=scales_hard_constrains,
                             print_total_energy=True,
                             get_peak_power=True,
-                            save_plots=save_plots)
+                            save_plots=save_plots,
+                            price=price)
         VALUE[(name)] = reward
         ENERGY[(name)] = energy_dict
         PEAK_POWER[(name)] = get_peak_power
@@ -124,50 +127,13 @@ def simulate_devices_and_limits(IO_dict: dict,
                             save_path=save_path,
                             tau_c=tau_c,
                             title=f'{title} {"+".join(subset)} with {pf_name} Scenario {x_scenario}',
-                            STATIC_PF=STATIC_PF
+                            STATIC_PF=STATIC_PF,
+                            price=price
                             )
 
             VALUE[subset] = reward
             ENERGY[subset] = energy_dict    
             PEAK_POWER[subset] = get_peak_power
-
-    # for subset in itertools.combinations(my_names, 3):
-    #     g_cl, name = DVPP_3_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_device_names}, 
-    #                         bpf_devices={k: Gs[k] for k in subset if k in bpf_device_names}, 
-    #                         hpf_devices={k: Gs[k] for k in subset if k in hpf_device_names},
-    #                         pi_params=pi_params, tau_c=tau_c,
-    #                         STATIC_PF=STATIC_PF,
-    #                         Gs_diff=Gs_diff)
-    #     reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_service_max, curve_service_min,
-    #                         name, tlim=[0, T_MAX],title=f'{title} {name} with {pf_name}',
-    #                         service_rating=sum(IO_dict[k][2] for k in subset),
-    #                         save_path=save_path,
-    #                         scales_hard_constrains=scales_hard_constrains,
-    #                         print_total_energy=True,
-    #                         get_peak_power=True,
-    #                         save_plots=save_plots)
-    #     VALUE[(name)] = reward
-    #     ENERGY[(name)] = energy_dict
-    #     PEAK_POWER[(name)] = get_peak_power
-
-    # for subset in itertools.combinations(my_names, 4):
-    #     g_cl, name = DVPP_4_devices(lpf_devices={k: Gs[k] for k in subset if k in lpf_device_names}, 
-    #                         bpf_devices={k: Gs[k] for k in subset if k in bpf_device_names}, 
-    #                         hpf_devices={k: Gs[k] for k in subset if k in hpf_device_names},
-    #                         STATIC_PF=STATIC_PF,
-    #                         pi_params=pi_params, tau_c=tau_c)
-    #     reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_service_max, curve_service_min,
-    #                         name, tlim=[0, T_MAX],title=f'{title} {name} with {pf_name}',
-    #                         service_rating=sum(IO_dict[k][2] for k in subset),
-    #                         save_path=save_path,
-    #                         scales_hard_constrains=scales_hard_constrains,
-    #                         print_total_energy=True,
-    #                         get_peak_power=True,
-    #                         Gs_diff=Gs_diff,
-    #                         save_plots=save_plots)
-    #     VALUE[(name)] = reward
-    #     ENERGY[(name)] = energy_dict
-    #     PEAK_POWER[(name)] = get_peak_power
 
     # save to path
     if save_data:
