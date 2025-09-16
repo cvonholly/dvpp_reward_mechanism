@@ -18,10 +18,7 @@ def get_shapely_value(values: dict, players: list) -> dict:
     # convert v to use sets as keys
     v = {frozenset({}): 0}  # empty set: zero value
     for k, vals in values.items():
-        if type(k) is str:
-            v[frozenset({k})] = vals
-        else:
-            v[frozenset(k)] = vals
+        v[frozenset(k)] = vals
     n = len(players)
     # iterate over all coalitions
     for c_size in range(1, len(players) + 1):  # iterate over coalition sizes

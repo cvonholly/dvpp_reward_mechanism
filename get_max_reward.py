@@ -33,7 +33,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               STATIC_PF = False,   # use static instead of dynamic
                               Gs_diff = {},  # specify different transfer functions for some devices
                               save_plots = True,
-                              save_data = True,
+                              save_data = False,
                               x_scenario = 0,  # specify scenario if needed from 1...Sx
                               price = 1
                             ):
@@ -65,6 +65,8 @@ def simulate_devices_and_limits(IO_dict: dict,
 
     my_names = list(IO_dict.keys())
     # get PI controller with physical saturation
+    for name, specs in IO_dict.items():
+        pi_params[name]['saturation_limits'] = (-specs[2], specs[2])  # -rating, +rating
     PIs = {name: get_pi_controller(params=pi_params[name]) for name in my_names}  
 
     # define error signal
@@ -94,7 +96,7 @@ def simulate_devices_and_limits(IO_dict: dict,
         # check if fulfills requirements
         g_cl = Closed_Loop_systems[name]
         reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_service_max, curve_service_min,
-                            name, tlim=[0, T_MAX],title=f'{title} {name}',
+                            name, tlim=[0, T_MAX],title=f'{title} {name} with {pf_name} Scenario {x_scenario}',
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
                             scales_hard_constrains=scales_hard_constrains,
@@ -102,9 +104,9 @@ def simulate_devices_and_limits(IO_dict: dict,
                             get_peak_power=True,
                             save_plots=save_plots,
                             price=price)
-        VALUE[(name)] = reward
-        ENERGY[(name)] = energy_dict
-        PEAK_POWER[(name)] = get_peak_power
+        VALUE[(name,)] = reward
+        ENERGY[(name,)] = energy_dict
+        PEAK_POWER[(name,)] = get_peak_power
 
     for i in range(2, len(my_names)+1):
         for subset in itertools.combinations(my_names, i):
@@ -141,18 +143,18 @@ def simulate_devices_and_limits(IO_dict: dict,
     print('Value function from S -> U:')
     print(VALUE)
 
-    print('Energy provision for each case:')
-    print(ENERGY)
-    # save energy dict to csv
-    if save_data:
-        name = 'energy_provision' if not STATIC_PF else 'energy_provision_static_pf'
-        pd.DataFrame(ENERGY).to_csv(f'{save_path}/{name}.csv')
+    # print('Energy provision for each case:')
+    # print(ENERGY)
+    # # save energy dict to csv
+    # if save_data:
+    #     name = 'energy_provision' if not STATIC_PF else 'energy_provision_static_pf'
+    #     pd.DataFrame(ENERGY).to_csv(f'{save_path}/{name}.csv')
 
-    print('Peak power for each case:')
-    print(PEAK_POWER)
-    if save_data:
-        name = 'peak_power' if not STATIC_PF else 'peak_power_static_pf'
-        pd.DataFrame(PEAK_POWER).to_csv(f'{save_path}/{name}.csv')
+    # print('Peak power for each case:')
+    # print(PEAK_POWER)
+    # if save_data:
+    #     name = 'peak_power' if not STATIC_PF else 'peak_power_static_pf'
+    #     pd.DataFrame(PEAK_POWER).to_csv(f'{save_path}/{name}.csv')
 
     print('Shapely value:')
     SHAPELY_VALS = get_shapely_value(VALUE, my_names)

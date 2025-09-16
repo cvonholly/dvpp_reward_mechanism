@@ -4,11 +4,32 @@ import numpy as np
 
 from src.get_controllers import sympy_to_tf
 
+
+def get_time_constants():
+    constants = {}
+    constants['PV'] = 1.5
+    constants['Wind'] = 2
+    constants['BESS'] = 0.1
+    constants['SC'] = 0.01
+    Rg, Rt, taur = 0.03, 0.38, 5
+    constants['Hydro'] = Rt/Rg*taur  # from Verena paper
+    return constants
+
+def get_pv_sys():
+    tau_PV = get_time_constants()['PV']
+    G_PV = ct.tf([1], [tau_PV, 1], inputs=['u'], outputs=['y'])
+    return G_PV
+
+def get_wind_sys():
+    tau_WTG = get_time_constants()['Wind']
+    G_WTG = ct.tf([1], [tau_WTG, 1], inputs=['u'], outputs=['y'])
+    return G_WTG
+
+
 def get_hydro_tf():
     """
     returns:
         hydro system
-        pi controler parameters
         hydro time constant
     """
     # get hydro system from Verena paper
@@ -23,12 +44,8 @@ def get_hydro_tf():
 
     T_hydro = get_hydro_tf()
     T_hydro = ct.tf(T_hydro.num, T_hydro.den, inputs=['u'], outputs=['y'])
-
-    # set pi params for hydro
-    # calculated and tuned in matlab
-    ps = {"kp": -0.0796, "ki": -0.09788}
     
-    return T_hydro, ps, hydro_t_constant
+    return T_hydro, hydro_t_constant
 
 def get_bess_io_sys(tau_BESS=0.1, t_drop=7, drop_exp=1.2):
     """

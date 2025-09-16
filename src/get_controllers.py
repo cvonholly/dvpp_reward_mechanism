@@ -1,7 +1,23 @@
 import control as ct
 import numpy as np
 import sympy as sp
- 
+
+def get_pi_params():
+    """
+    returns dictionary with pi controller parameters for each device
+
+    PV, Wind, BESS, Hydro, SC   
+    """
+    pi_params = {}
+    pi_params['PV'] = {"kp": 11.9, "ki": 157.9}
+    pi_params['Wind'] = {"kp": 11.9, "ki": 118}
+    pi_params['BESS'] = {"kp": 12, "ki": 2370}
+    pi_params['Hydro'] = {"kp": -0.0796, "ki": -0.09788}
+    pi_params['SC'] = {"kp": 12, "ki": 2370}
+    return pi_params
+
+
+
 def pi_update(t, x, u, params={}):
     # Get the controller parameters that we need
     kp = params.get('kp')
