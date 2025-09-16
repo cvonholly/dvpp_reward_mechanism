@@ -29,6 +29,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from check_qualification import sympy_to_tf, create_curve
+from src.get_device_systems import get_bess_io_sys
 from get_max_reward import simulate_devices_and_limits
 
 # import procduction data
@@ -50,8 +51,8 @@ power_ratings_dict = {  # in MVA
 
 all_shapely_values = []
 all_values = []
-SERVICE = 'FFR-FCR'  # options: 'FCR', 'FFR', 'FFR-FCR'
-my_path = 'pics/varying/FCR' if SERVICE=='FCR' else 'pics/varying/FFR' if SERVICE=='FFR' else 'pics/varying/FFR_FCR'
+SERVICE = 'FCR'  # options: 'FCR', 'FFR', 'FFR-FCR'
+my_path = 'pics/v1/FCR' if SERVICE=='FCR' else 'pics/v1/FFR' if SERVICE=='FFR' else 'pics/v1/FFR_FCR' if SERVICE=='FFR-FCR' else 'pics/v1/FCR_D'
 service_diff = 0.1  # minimum fraction of capacity that can be provided as service (1MW)
 
 my_names = list(power_ratings_dict.keys())
@@ -67,6 +68,12 @@ pi_params['PV'] = {"kp": 11.9, "ki": 157.9}
 pi_params['Wind'] = {"kp": 11.9, "ki": 118}
 pi_params['BESS'] = {"kp": 12, "ki": 2370}
 
+Gs_diff = {
+    'PV': ct.tf([K_PV], [tau_PV, 1]),
+    'Wind': ct.tf([K_WTG], [tau_WTG, 1]),
+    'BESS': ct.tf([K_BESS], [tau_BESS, 1])
+}
+
 # now select Sx scenarios where we simulate wind solar and battery
 Sx = 5  # number of scenarios
 # selected_indices = np.random.randint(0, high=len(wind_solar_dc_gains), size=Sx)
@@ -75,11 +82,10 @@ selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
 
 # run scenario simulations
 for i, idx in enumerate(selected_indices):
+    # get contol systems
     G_PV = ct.tf([K_PV], [tau_PV, 1], inputs=['u'], outputs=['y'])
     G_WTG = ct.tf([K_WTG], [tau_WTG, 1], inputs=['u'], outputs=['y'])
-    G_BESS = ct.tf([K_BESS], [tau_BESS, 1], inputs=['u'], outputs=['y'])
-
-    # todo: integrate restricted battery model
+    G_BESS = get_bess_io_sys(tau_BESS=tau_BESS, t_drop=30)
 
     # now get restricted power rating due to time varying dc gain
     dc_gain_Wind = wind_solar_dc_gains['Wind'].iloc[idx] * power_ratings_dict['Wind']
@@ -105,6 +111,9 @@ for i, idx in enumerate(selected_indices):
     elif SERVICE == 'FFR-FCR':
         T_MAX = 60
         ts, input, requirement_curve = get_ffr_fcr()
+    elif SERVICE == 'FCR-D':
+        T_MAX = 60
+        ts, input, requirement_curve = get_fcr_d()
 
     price = prices.iloc[idx, 0] if SERVICE=='FFR' else prices.iloc[idx, 1]
 
@@ -121,7 +130,8 @@ for i, idx in enumerate(selected_indices):
                                 STATIC_PF=False,
                                 save_data=False,
                                 x_scenario=i+1,
-                                price=price  # specify scenario if needed from 1...Sx,
+                                price=price,  # specify scenario if needed from 1...Sx,
+                                Gs_diff=Gs_diff
     )
 
     all_values.append(VALUE)

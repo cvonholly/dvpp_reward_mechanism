@@ -65,10 +65,17 @@ def get_DVPP(IO_dict,
         # also add to IO_dict
         IO_dict[bpf_name] = (bpf_g, 'hpf', IO_dict[bpf_name][2])
         del bpf_devices[bpf_name]
+    if sum([v[2] for v in IO_dict.values() if v[1] == 'lpf']) < 1e-3:
+        # LPF device has zero capacity, make hpf device to lpf
+        hpf_name, hpf_g = list(hpf_devices.items())[0]
+        lpf_devices[hpf_name] = hpf_g
+        # also add to IO_dict
+        IO_dict[hpf_name] = (hpf_g, 'lpf', IO_dict[hpf_name][2])
+        del hpf_devices[hpf_name]
 
-    # print devicees and type
-    print(f'LPF devices: {lpf_devices}, BPF devices: {bpf_devices}, HPF devices: {hpf_devices}')
-    
+    # print devices and type
+    print(f'LPF devices: {lpf_devices.keys()}, BPF devices: {bpf_devices.keys()}, HPF devices: {hpf_devices.keys()}')
+
     # set devices and rating
     n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
     sum_service_rating = sum([v[2] for v in IO_dict.values() if v[1] == 'lpf'])
@@ -108,6 +115,7 @@ def get_DVPP(IO_dict,
     service_rating = max(sum_service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
     vref = service_rating * vref   # sacel by rating
     for k, name, G in zip(range(n_devices), names, all_devices):
+        print('Running for device:', name)
         # each plant has their own desired transfer function, namely mks[name] from y -> y_i
         T_des = mks[name]
         T_des.name = f'T_des_{name}'
@@ -139,14 +147,16 @@ def get_DVPP(IO_dict,
     plant_output = np.sum([responses[n].outputs[0] for n in names], axis=0) if responses[names[0]].outputs.ndim > 1 else np.sum([responses[n].outputs for n in names], axis=0)
 
     # check if unit fulfills test
-    reward = -3 * service_rating * price * scales_hard_constrains[0]  # penalty if not fulfilling requirements
-    new_hard_constraints = service_rating * min_hard_constrains * scales_hard_constrains[0]
+    final_rating = service_rating * scales_hard_constrains[0]
+    reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+    new_hard_constraints = final_rating * min_hard_constrains
     for scale in scales_hard_constrains:
-        diff = tol + plant_output - service_rating * min_hard_constrains * scale
+        diff = tol + plant_output - final_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
             reward = service_rating * scale * price
-            new_hard_constraints = service_rating * min_hard_constrains * scale
+            final_rating = service_rating * scale
+            new_hard_constraints = final_rating * min_hard_constrains
         else:
             # failed the test
             break
@@ -192,7 +202,7 @@ def get_DVPP(IO_dict,
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')
-    final_title = title + f', Reward: {reward:.2f}€, at {service_rating:.1f}MW'
+    final_title = title + f', Reward: {reward:.2f}€, at {final_rating:.1f}MW'
     plt.title(final_title)
     plt.grid(True)
     plt.xlabel('Time [s]')

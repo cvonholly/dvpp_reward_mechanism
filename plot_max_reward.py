@@ -12,7 +12,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
                          print_total_energy=False,
                          get_peak_power=False,
                          save_plots=True,
-                         min_service_rating=1,
+                         min_service_rating=.1,
                          price=1):
     """
     gets the maximum the power plant can output and outputs the result
@@ -38,9 +38,8 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     peak_powerd_dict = {}   # dictionary for peak power
 
     # scale reference and hard constraints to service rating minus tollerance
-    service_rating = max(service_rating, min_service_rating)   # 0.1 MW is min service rating
-    
-    vref, min_hard_constrains = service_rating * vref, service_rating * min_hard_constrains
+    service_rating = max(service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
+    vref = service_rating * vref   # scale by rating
 
     # Simulate the closed-loop response
     response = ct.input_output_response(closed_loop, t, vref, x0,
@@ -48,14 +47,16 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     plant_output = response.outputs[0] if response.outputs.ndim > 1 else response.outputs
     
     # check if unit fulfills test
-    reward = -3 * service_rating * price  # penalty if not fulfilling requirements, todo: implement better
-    new_hard_constraints = min_hard_constrains * scales_hard_constrains[0]
+    final_rating = service_rating * scales_hard_constrains[0]
+    reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+    new_hard_constraints = final_rating * min_hard_constrains
     for scale in scales_hard_constrains:
-        diff = tol + plant_output - new_hard_constraints
+        diff = tol + plant_output - final_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
             reward = service_rating * scale * price
-            new_hard_constraints = min_hard_constrains * scale
+            final_rating = service_rating * scale
+            new_hard_constraints = final_rating * min_hard_constrains
         else:
             # failed the test
             break
@@ -106,7 +107,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')
-    plt.title(title + f', Reward: {reward:.2f}€, at {service_rating:.1f}MW')
+    plt.title(title + f', Reward: {reward:.2f}€, at {final_rating:.1f}MW')
     plt.grid(True)
     plt.xlabel('Time [s]')
     plt.ylabel('Output')

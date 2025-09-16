@@ -29,7 +29,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               title: str='',
                               T_MAX=60,
                               save_path='pics/FFR',
-                              service_diff = 0.1, # derating to ensure some margin
+                              service_diff = 0.1, # fraction of minimum service to supply. at 1 MW -> 0.1 * 1 MW = 0.1 MW
                               STATIC_PF = False,   # use static instead of dynamic
                               Gs_diff = {},  # specify different transfer functions for some devices
                               save_plots = True,
@@ -65,7 +65,6 @@ def simulate_devices_and_limits(IO_dict: dict,
 
     my_names = list(IO_dict.keys())
     # get PI controller with physical saturation
-    Gs = {name: v[0] for name, v in IO_dict.items()}  # get only the transfer functions
     PIs = {name: get_pi_controller(params=pi_params[name]) for name in my_names}  
 
     # define error signal
@@ -76,7 +75,7 @@ def simulate_devices_and_limits(IO_dict: dict,
     err_out = ct.summing_junction(['e'], 'err_out')
 
     # create closed-loop systems
-    Closed_Loop_systems = {name: ct.interconnect([PIs[name], Gs[name], error, u_out, err_out], inputs=['yref'], outputs=['y', 'u_out', 'err_out']) for name in my_names}
+    Closed_Loop_systems = {name: ct.interconnect([PIs[name], IO_dict[name][0], error, u_out, err_out], inputs=['yref'], outputs=['y', 'u_out', 'err_out']) for name in my_names}
 
     ## SET PARAMS FOR DVPP
     # example: Solar PV LPF, Wind LPF and Battery HPF

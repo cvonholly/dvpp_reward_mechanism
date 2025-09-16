@@ -3,6 +3,7 @@
 import itertools
 import math as mt
 import scipy.optimize as opt
+from itertools import combinations
 
 def get_shapely_value(values: dict, players: list) -> dict:
     """
@@ -24,7 +25,7 @@ def get_shapely_value(values: dict, players: list) -> dict:
     n = len(players)
     # iterate over all coalitions
     for c_size in range(1, len(players) + 1):  # iterate over coalition sizes
-        for subset in itertools.combinations(players, c_size):  # get all coalitions of size c_size
+        for subset in combinations(players, c_size):  # get all coalitions of size c_size
             k = len(subset)
             for p in subset:  # iterate over player in coalition and change their shapely value
                 subset = frozenset(subset)
