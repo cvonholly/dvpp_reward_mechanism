@@ -51,7 +51,7 @@ power_ratings_dict = {  # in MVA
 
 all_shapely_values = []
 all_values = []
-SERVICE = 'FFR-FCR'  # options: 'FCR', 'FFR', 'FFR-FCR', 'FCR-D'
+SERVICE = 'FCR'  # options: 'FCR', 'FFR', 'FFR-FCR', 'FCR-D'
 my_path = 'pics/v3/FCR' if SERVICE=='FCR' else 'pics/v3/FFR' if SERVICE=='FFR' else 'pics/v3/FFR_FCR' if SERVICE=='FFR-FCR' else 'pics/v3/FCR_D'
 service_diff = 0.1  # minimum fraction of capacity that can be provided as service (1MW)
 
@@ -83,6 +83,7 @@ pi_params['Wind'] = {"kp": 11.9, "ki": 118}
 
 # define 1st order transfer function for ADPFs
 Gs_diff = {
+    'Wind': ct.tf([K_WTG], [tau_WTG, 1]),
     'Hydro': ct.tf([1], [hydro_t_constant, 1]),
     'BESS': ct.tf([1], [tau_BESS, 1]),
     'SC': ct.tf([1], [tau_SC, 1]),

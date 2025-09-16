@@ -51,7 +51,7 @@ power_ratings_dict = {  # in MVA
 
 all_shapely_values = []
 all_values = []
-SERVICE = 'FCR'  # options: 'FCR', 'FFR', 'FFR-FCR'
+SERVICE = 'FCR-D'  # options: 'FCR', 'FFR', 'FFR-FCR', 'FCR-D'
 my_path = 'pics/v1/FCR' if SERVICE=='FCR' else 'pics/v1/FFR' if SERVICE=='FFR' else 'pics/v1/FFR_FCR' if SERVICE=='FFR-FCR' else 'pics/v1/FCR_D'
 service_diff = 0.1  # minimum fraction of capacity that can be provided as service (1MW)
 

@@ -51,7 +51,7 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     reward = -3 * price * final_rating  # penalty if not fulfilling requirements
     new_hard_constraints = final_rating * min_hard_constrains
     for scale in scales_hard_constrains:
-        diff = tol + plant_output - final_rating * min_hard_constrains
+        diff = tol + plant_output - scale * service_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
             reward = service_rating * scale * price
