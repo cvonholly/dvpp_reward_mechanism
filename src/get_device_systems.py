@@ -28,14 +28,12 @@ def get_wind_sys():
 
 def get_hydro_tf():
     """
-    returns:
-        hydro system
-        hydro time constant
+    return:
+        hydro IO control system
     """
     # get hydro system from Verena paper
     Rg, Rt = 0.03, 0.38
     taug, taur, tauw = 0.2, 5, 1
-    hydro_t_constant = Rt/Rg*taur
 
     def get_hydro_tf():
         s = sp.symbols('s')
@@ -45,7 +43,7 @@ def get_hydro_tf():
     T_hydro = get_hydro_tf()
     T_hydro = ct.tf(T_hydro.num, T_hydro.den, inputs=['u'], outputs=['y'])
     
-    return T_hydro, hydro_t_constant
+    return T_hydro
 
 def get_bess_io_sys(tau_BESS=0.1, t_drop=7, drop_exp=1.2):
     """

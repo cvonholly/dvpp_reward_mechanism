@@ -66,7 +66,8 @@ Sx = 1  # number of scenarios
 selected_indices = np.random.randint(0, high=len(wind_solar_dc_gains), size=Sx)
 
 # get control systems
-G_Hydro, pi_params_hydro, hydro_t_constant = get_hydro_tf()
+# todo
+# G_Hydro, pi_params_hydro, hydro_t_constant = get_hydro_tf()
 # todo: corret me
 G_BESS = get_bess_io_sys(tau_BESS=tau_BESS, t_drop=30)
 G_SC = get_sc_io_sys(tau_SC=tau_SC)

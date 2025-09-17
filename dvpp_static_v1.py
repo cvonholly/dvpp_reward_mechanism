@@ -32,7 +32,7 @@ from itertools import chain, combinations
 from src.get_device_systems import get_bess_io_sys
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
-from src.get_device_systems import get_time_constants, get_pv_sys, get_wind_sys
+from src.get_device_systems import get_time_constants, get_pv_sys, get_wind_sys, get_sc_io_sys
 
 # import procduction data
 from src.time_varying_dc_gain import get_wind_solar_dc_gains
@@ -132,7 +132,9 @@ if __name__ == '__main__':
     # run simulation with default parameters
     def get_io_dict():
         return {'PV': (get_pv_sys(), 'lpf', 1),
-                'Wind': (get_wind_sys(), 'lpf', 1),
-                'BESS': (get_bess_io_sys(t_drop=20), 'hpf', 1)}
+                # 'Wind': (get_wind_sys(), 'lpf', 1),
+                'BESS': (get_bess_io_sys(t_drop=20), 'bpf', 1),
+                'SC': (get_sc_io_sys(t_drop=5), 'hpf', 1),
+                }
                 
     run_dvpp_simulation(get_io_dict)
