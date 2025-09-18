@@ -60,8 +60,8 @@ def simulate_devices_and_limits(IO_dict: dict,
         PEAK_POWER: dict with peak power for each coalition
         SHAPELY_VALS: dict with shapely values for each player
     """
-    # scales of the reference/hard constraints to test
-    scales_hard_constrains = np.linspace(service_diff, 1, int(3/service_diff))
+    # scales of the reference/hard constraints to test: from service_diff to 1 in 50 steps
+    scales_hard_constrains = np.linspace(service_diff, 1, 50)
 
     my_names = list(IO_dict.keys())
     # get PI controller with physical saturation
@@ -96,7 +96,7 @@ def simulate_devices_and_limits(IO_dict: dict,
         # check if fulfills requirements
         g_cl = Closed_Loop_systems[name]
         reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_service_max, curve_service_min,
-                            name, tlim=[0, T_MAX],title=f'{title} {name} with {pf_name} Scenario {x_scenario}',
+                            name, tlim=[0, T_MAX],title=f'{title} {name} {pf_name} Scenario={x_scenario}',
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
                             scales_hard_constrains=scales_hard_constrains,
@@ -123,7 +123,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                             save_plots=save_plots,
                             save_path=save_path,
                             tau_c=tau_c,
-                            title=f'{title} {"+".join(subset)} with {pf_name} Scenario {x_scenario}',
+                            title=f'{title} {"+".join(subset)} {pf_name} Scenario={x_scenario}',
                             STATIC_PF=STATIC_PF,
                             price=price,
                             )

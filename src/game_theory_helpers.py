@@ -3,22 +3,53 @@
 import itertools
 import math as mt
 import scipy.optimize as opt
-from itertools import combinations
+from itertools import combinations, chain
 
-def get_shapely_value(values: dict, players: list) -> dict:
+
+def powerset(iterable):
+    "Subsequences of the iterable from shortest to longest."
+    # powerset([1,2,3]) → () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    s = list(iterable)
+    x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+    return [frozenset(comb) for comb in x]
+
+def is_convex_game(v: dict, players: list, tol=5e-2) -> bool:
+    """
+    Check if a coalition game is convex.
+
+    critertion: v(S ∪ T) + v(S ∩ T) ≥ v(S) + v(T) for all coalitions S, T
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    """
+    for S in powerset(players):
+        for T in powerset(players):
+            if S and T:  # skip empty sets
+                union = S.union(T)
+                intersection = S.intersection(T)
+                if v[union] + v[intersection] < v[S] + v[T] - tol:
+                    print(f"Game is not convex: {S}, {T}")
+                    return False
+    return True
+
+def get_shapely_value(values: dict, players: list,
+                      key_type='tuple') -> dict:
     """
     Shapley value calculation for a coalition game.
 
     v: Characteristic function of the game, must be defined for EVERY coalition
-        {tuple -> float}
+        {tuple/frozenset -> float}
     players: list of players
     """
     # initialize with zero value
     shapley_values = {p: 0 for p in players}
     # convert v to use sets as keys
     v = {frozenset({}): 0}  # empty set: zero value
-    for k, vals in values.items():
-        v[frozenset(k)] = vals
+    if key_type != 'frozenset':
+        for k, vals in values.items():
+            v[frozenset(k)] = vals
+    else:
+        v = values
     n = len(players)
     # iterate over all coalitions
     for c_size in range(1, len(players) + 1):  # iterate over coalition sizes
@@ -41,15 +72,15 @@ def get_nash_bargaining_solution(v: dict, players: list, bargaining_power={}) ->
     Nash bargaining solution for a coalition game.
 
     v: Characteristic function of the game, must be defined for EVERY coalition
-        {tuple -> float}
+        {frozenset -> float}
     players: list of players
     bargaining_power (optional): bargaining power of each player
         {player -> float}
     """
     # start by extracting status quo point: value of single players
-    status_quo = {p: v.get((p), 0) for p in players}
+    status_quo = {p: v.get(frozenset({p}), 0) for p in players}
     # add constraint: sum of values must be less than value of grand coalition
-    grand_coalition = tuple(players)
+    grand_coalition = frozenset(players)
     total = v.get(grand_coalition, 0)
     # construct scipy optimization problem
     if not bargaining_power:

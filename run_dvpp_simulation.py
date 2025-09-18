@@ -24,26 +24,16 @@ Setup:
 
 import control as ct
 import numpy as np
-import sympy as sp
 import pandas as pd
-import matplotlib.pyplot as plt
-from itertools import chain, combinations
 
-from src.get_device_systems import get_bess_io_sys
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
-from src.get_device_systems import get_time_constants, get_pv_sys, get_wind_sys, get_sc_io_sys
+from src.get_device_systems import get_time_constants
 
 # import procduction data
 from src.time_varying_dc_gain import get_wind_solar_dc_gains
 from src.get_required_services import *
-from src.game_theory_helpers import get_shapely_value, get_nash_bargaining_solution
 
-def powerset(iterable):
-    "Subsequences of the iterable from shortest to longest."
-    # powerset([1,2,3]) → () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 def run_dvpp_simulation(create_io_dict,
                         save_path='pics/new',
@@ -51,6 +41,7 @@ def run_dvpp_simulation(create_io_dict,
                         service_diff = 0.1,  # minimum fraction of capacity that can be provided as service (1MW)
                         Sx=1,   # number of scenarios to average over
                         make_PV_Wind_stochastic=False,   # take dc gain from probability distribution
+                        STATIC_PF=False
                         ):
     
     wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  # time series of 15-minute dc gain
@@ -97,11 +88,11 @@ def run_dvpp_simulation(create_io_dict,
                                         pi_params=pi_params,
                                         input_service_max=input,
                                         curve_service_min=requirement_curve,
-                                        title=f'{service} Response of',
+                                        title=f'{service}',
                                         service_diff=service_diff,
                                         T_MAX=ts[-1],
                                         save_path=my_path,
-                                        STATIC_PF=False,
+                                        STATIC_PF=STATIC_PF,
                                         save_data=False,
                                         x_scenario=i+1,
                                         price=price,  # specify scenario if needed from 1...Sx,
@@ -128,13 +119,3 @@ def run_dvpp_simulation(create_io_dict,
     df.index = indexes
     df.to_csv(f'{save_path}/shapely.csv', float_format='%.4f')
 
-if __name__ == '__main__':
-    # run simulation with default parameters
-    def get_io_dict():
-        return {'PV': (get_pv_sys(), 'lpf', 1),
-                # 'Wind': (get_wind_sys(), 'lpf', 1),
-                'BESS': (get_bess_io_sys(t_drop=20), 'bpf', 1),
-                'SC': (get_sc_io_sys(t_drop=5), 'hpf', 1),
-                }
-                
-    run_dvpp_simulation(get_io_dict)

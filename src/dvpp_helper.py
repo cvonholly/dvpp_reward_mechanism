@@ -202,7 +202,7 @@ def get_DVPP(IO_dict,
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')
-    final_title = title + f', Reward: {reward:.2f}€, at {final_rating:.1f}MW'
+    final_title = title + f', Reward: {reward:.2f}€, at {final_rating:.2f}MW'
     plt.title(final_title)
     plt.grid(True)
     plt.xlabel('Time [s]')
@@ -268,7 +268,7 @@ def DVPP_2_devices(lpf_devices, bpf_devices, hpf_devices,
         for name, g in bpf_devices.items():
             mks[name] = ct.tf([theta_i], [1]) 
         for name, g in hpf_devices.items():
-            mks[name] = ct.tf([theta_i], [1])  
+            mks[name] = ct.tf([theta_i], [1])
 
     # next, build the system assuming 2 devices
     name1, name2 = [k for k in lpf_devices.keys()] + [k for k in bpf_devices.keys()] + [k for k in hpf_devices.keys()]
