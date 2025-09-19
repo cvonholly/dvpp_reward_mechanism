@@ -32,7 +32,70 @@ def is_convex_game(v: dict, players: list, tol=5e-2) -> bool:
                     return False
     return True
 
-def get_shapely_value(values: dict, players: list,
+# another convexity test: only grand coalition  vs. all other coalitions
+def check_convexity_grand_coalition(v: dict, players: list, tol=5e-2,
+                                    print_max_min_benefit=True) -> bool:
+    grand_coalition = frozenset(players)
+    max_benefit, min_benefit = 0, 1e12
+    for S in powerset(players):
+        if S and S != grand_coalition:
+            T = grand_coalition - S
+            diff = v[grand_coalition] + v[frozenset()] - v[S] - v[T]
+            max_benefit = max(max_benefit, diff)
+            min_benefit = min(min_benefit, diff)
+            if diff + tol < 0:
+                print(f"    Game is not Grand-Coalition convex: {str(S)}, {str(T)}, diff={diff:.2f}")
+                return False
+    print("    Grand-Coalition Convexity holds")
+    if print_max_min_benefit:
+        print(f"        Max benefit: {max_benefit:.2f}, Min benefit: {min_benefit:.2f}")
+    return True
+
+def get_loo(v: dict, players: list, normalized=True) -> dict:
+    """
+    get Leave-One-Out values for each player
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    players: list of players
+    """
+    loo_values = {}
+    grand_coalition = frozenset(players)
+    for p in players:
+        subset_wo_p = frozenset(c for c in players if c != p)
+        loo_values[p] = v.get(grand_coalition) - v.get(subset_wo_p)
+    if normalized:
+        total_loo = sum(loo_values.values())
+        reward = v[grand_coalition]
+        if total_loo > 0:
+            loo_values = {k: v * (reward / total_loo) for k, v in loo_values.items()}
+    return loo_values
+
+def get_banzhaf_value(v: dict, players: list, normalized=True) -> dict:
+    """
+    get Banzhaf values for each player
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    players: list of players
+    """
+    factor = 1 / (2 ** (len(players) - 1))
+    banzhaf_values = {p: 0 for p in players}
+    for S in powerset(players):
+        if S:  # skip 
+            for p in S:
+                subset_wo_p = frozenset(c for c in S if c != p)
+                marginal_contribution = v.get(S) - v.get(subset_wo_p)
+                banzhaf_values[p] += marginal_contribution
+    banzhaf_values = {k: v * factor for k, v in banzhaf_values.items()}
+    if normalized:
+        total_banzhaf = sum(banzhaf_values.values())
+        reward = v[frozenset(players)]
+        if total_banzhaf > 0:
+            banzhaf_values = {k: v * (reward / total_banzhaf) for k, v in banzhaf_values.items()}
+    return banzhaf_values
+
+def get_shapley_value(values: dict, players: list,
                       key_type='tuple') -> dict:
     """
     Shapley value calculation for a coalition game.

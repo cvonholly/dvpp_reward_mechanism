@@ -7,8 +7,8 @@ import pandas as pd
 
 from check_qualification import *
 from src.dvpp_helper import DVPP_2_devices, DVPP_3_devices, DVPP_4_devices
-from plot_max_reward import plot_reward_value
-from src.game_theory_helpers import get_shapely_value
+from get_single_cl import plot_reward_value
+from src.game_theory_helpers import get_shapley_value
 
 """
 
@@ -294,7 +294,7 @@ name = 'peak_power' if not STATIC_PF else 'peak_power_static_pf'
 pd.DataFrame(PEAK_POWER).to_csv(f'data/{name}.csv')
 
 print('Shapely value:')
-SHAPELY_VALS = get_shapely_value(VALUE, my_names)
+SHAPELY_VALS = get_shapley_value(VALUE, my_names)
 print(SHAPELY_VALS)
 # reformat for saving
 name = 'shapely_value' if not STATIC_PF else 'shapely_value_static_pf'

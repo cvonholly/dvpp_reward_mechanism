@@ -8,9 +8,8 @@ import itertools
 
 # from check_qualification import *
 from src.dvpp_helper import get_DVPP   # DVPP_2_devices, DVPP_3_devices, DVPP_4_devices, plot_DVPP_2_devices
-from plot_max_reward import plot_reward_value
+from src.get_single_cl import get_single_cl
 from src.get_controllers import get_pi_controller
-from src.game_theory_helpers import get_shapely_value
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
 """
@@ -33,9 +32,10 @@ def simulate_devices_and_limits(IO_dict: dict,
                               STATIC_PF = False,   # use static instead of dynamic
                               Gs_diff = {},  # specify different transfer functions for some devices
                               save_plots = True,
-                              save_data = False,
+                              save_pics = True,
                               x_scenario = 0,  # specify scenario if needed from 1...Sx
-                              price = 1
+                              price = 1,
+                              adaptive_func={}
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -95,7 +95,7 @@ def simulate_devices_and_limits(IO_dict: dict,
     for name in my_names:
         # check if fulfills requirements
         g_cl = Closed_Loop_systems[name]
-        reward, energy_dict, get_peak_power = plot_reward_value(g_cl, input_service_max, curve_service_min,
+        reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
                             name, tlim=[0, T_MAX],title=f'{title} {name} {pf_name} Scenario={x_scenario}',
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
@@ -103,7 +103,9 @@ def simulate_devices_and_limits(IO_dict: dict,
                             print_total_energy=True,
                             get_peak_power=True,
                             save_plots=save_plots,
-                            price=price)
+                            price=price,
+                            save_pics=save_pics,
+                            adaptive_func=adaptive_func)
         VALUE[(name,)] = reward
         ENERGY[(name,)] = energy_dict
         PEAK_POWER[(name,)] = get_peak_power
@@ -126,42 +128,12 @@ def simulate_devices_and_limits(IO_dict: dict,
                             title=f'{title} {"+".join(subset)} {pf_name} Scenario={x_scenario}',
                             STATIC_PF=STATIC_PF,
                             price=price,
+                            save_pics=save_pics,
+                            adaptive_func=adaptive_func
                             )
 
             VALUE[subset] = reward
             ENERGY[subset] = energy_dict    
             PEAK_POWER[subset] = get_peak_power
 
-    # save to path
-    if save_data:
-        is_static = '_static_pf' if STATIC_PF else ''
-        pd.DataFrame(VALUE, index=[0]).to_csv(f'{save_path}/value_function{is_static}.csv')
-        
-    # reformat for shapely value
-    # VALUE ={tuple(k.replace(' ', '').split('+')): v for k, v in VALUE.items()}
-    VALUE[()] = 0  # empty coaltion: value zero
-    print('Value function from S -> U:')
-    print(VALUE)
-
-    # print('Energy provision for each case:')
-    # print(ENERGY)
-    # # save energy dict to csv
-    # if save_data:
-    #     name = 'energy_provision' if not STATIC_PF else 'energy_provision_static_pf'
-    #     pd.DataFrame(ENERGY).to_csv(f'{save_path}/{name}.csv')
-
-    # print('Peak power for each case:')
-    # print(PEAK_POWER)
-    # if save_data:
-    #     name = 'peak_power' if not STATIC_PF else 'peak_power_static_pf'
-    #     pd.DataFrame(PEAK_POWER).to_csv(f'{save_path}/{name}.csv')
-
-    print('Shapely value:')
-    SHAPELY_VALS = get_shapely_value(VALUE, my_names)
-    print(SHAPELY_VALS)
-    # reformat for saving
-    if save_data:
-        name = 'shapely_value' if not STATIC_PF else 'shapely_value_static_pf'
-        pd.DataFrame(SHAPELY_VALS, index=[0]).to_csv(f'{save_path}/{name}.csv')
-
-    return VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS
+    return VALUE, ENERGY, PEAK_POWER

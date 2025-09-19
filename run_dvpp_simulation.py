@@ -41,15 +41,15 @@ def run_dvpp_simulation(create_io_dict,
                         service_diff = 0.1,  # minimum fraction of capacity that can be provided as service (1MW)
                         Sx=1,   # number of scenarios to average over
                         make_PV_Wind_stochastic=False,   # take dc gain from probability distribution
-                        STATIC_PF=False
+                        STATIC_PF=False,
+                        save_pics=True,
+                        adaptive_func={}  # adaptive dynamic participation factor function
                         ):
     
     wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  # time series of 15-minute dc gain
 
     # get all orders of coalitions
-    # all_shapely_values = pd.DataFrame(pd.NA, columns=list(powerset(create_io_dict().keys())), index=list(services_input.keys()))
-    # all_values = pd.DataFrame(pd.NA, columns=list(powerset(create_io_dict().keys())), index=list(services_input.keys()))
-    all_values, all_shapely_values = {}, {}
+    all_values = {}
     power_ratings_dict = {name: vals[2] for name, vals in create_io_dict().items()}
     my_names = list(power_ratings_dict.keys())
 
@@ -61,18 +61,25 @@ def run_dvpp_simulation(create_io_dict,
 
     # set scenarios
     if Sx > 1:
-        ps = probs_15_min.iloc[:, 0].values if service=='FFR' else probs_15_min.iloc[:, 1].values
+        ps = probs_15_min.iloc[:, 0].values
         selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
-    else:
+    if Sx == 1:
         # set price to average non-zero price
         price = prices[prices>0].mean()
         prices = pd.DataFrame([price], columns=prices.columns, index=[0])
         selected_indices = [0]
 
-    for i, idx in enumerate(selected_indices):
-        for service, (ts, input, requirement_curve) in services_input.items():
+    
+    for service, (ts, input, requirement_curve) in services_input.items():
+        #
+        # todo: in future use different probabilities for different services, however now for comaprison reasons, use same
+        #
+        # if Sx > 1:
+        #     ps = probs_15_min.iloc[:, 0].values if service=='FFR' else probs_15_min.iloc[:, 1].values
+        #     selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
+        for i, idx in enumerate(selected_indices):
             print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, index {idx} \n')
-            IO_dict = create_io_dict()  # reset io dict for each service
+            IO_dict = create_io_dict()    # reset io dict for each service
             if make_PV_Wind_stochastic:   # adjust dc gain
                 dc_gain_Wind = wind_solar_dc_gains['Wind'].iloc[idx] * power_ratings_dict['Wind']
                 dc_gain_PV = wind_solar_dc_gains['Solar'].iloc[idx] * power_ratings_dict['PV']
@@ -83,7 +90,7 @@ def run_dvpp_simulation(create_io_dict,
             my_path = save_path + '/' + service.replace('-', '_')
 
             # service response
-            VALUE, ENERGY, PEAK_POWER, SHAPELY_VALS = simulate_devices_and_limits(
+            VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
                                         IO_dict=IO_dict,
                                         pi_params=pi_params,
                                         input_service_max=input,
@@ -93,29 +100,18 @@ def run_dvpp_simulation(create_io_dict,
                                         T_MAX=ts[-1],
                                         save_path=my_path,
                                         STATIC_PF=STATIC_PF,
-                                        save_data=False,
                                         x_scenario=i+1,
                                         price=price,  # specify scenario if needed from 1...Sx,
-                                        Gs_diff=Gs_diff
+                                        Gs_diff=Gs_diff,
+                                        save_pics=save_pics,
+                                        adaptive_func=adaptive_func
             )
-
-            # all_values.loc[service, :] = VALUE
-            # all_shapely_values.loc[service, :] = SHAPELY_VALS
-
-            all_values[service] = VALUE
-            all_shapely_values[service] = SHAPELY_VALS
-
-    # create final shapely value by averaging over scenarios
-    indexes = list(services_input.keys())
-    if Sx > 1:
-        # make multiindex
-        indexes = pd.MultiIndex.from_product([list(range(0, Sx)), list(services_input.keys())], names=['Scenario', 'Service'])
+            if Sx == 1:
+                all_values[service] = VALUE
+            else:
+                all_values[(service, i)] = VALUE
         
     # save values and shapely values
+    pf_name = 'stat' if STATIC_PF else 'dyn'
     df = pd.DataFrame.from_dict(all_values, orient='index')
-    df.index = indexes
-    df.to_csv(f'{save_path}/values.csv', float_format='%.4f')
-    df = pd.DataFrame.from_dict(all_shapely_values, orient='index')
-    df.index = indexes
-    df.to_csv(f'{save_path}/shapely.csv', float_format='%.4f')
-
+    df.to_csv(f'{save_path}/values_{pf_name}.csv', float_format='%.5f')

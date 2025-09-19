@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import control as ct
 
 
-def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
+def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
                          name: str, title='', tlim=(0, 60),
                          service_rating=1,
                          scales_hard_constrains=np.array([]),
@@ -13,7 +13,9 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
                          get_peak_power=False,
                          save_plots=True,
                          min_service_rating=.1,
-                         price=1):
+                         price=1,
+                         save_pics=True,
+                         adaptive_func={}):
     """
     gets the maximum the power plant can output and outputs the result
 
@@ -41,6 +43,10 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
     service_rating = max(service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
     vref = service_rating * vref   # scale by rating
 
+    if name in adaptive_func:  # adapt reference if function is given
+        scaling = adaptive_func[name](t)
+        vref = vref * scaling
+
     # Simulate the closed-loop response
     response = ct.input_output_response(closed_loop, t, vref, x0,
                                         solve_ivp_method='LSODA')
@@ -60,6 +66,9 @@ def plot_reward_value(closed_loop: ct.TransferFunction, vref, min_hard_constrain
         else:
             # failed the test
             break
+    
+    if not save_pics:  # do not plot
+        return reward, {}, {}
 
     # Plot results
     plt.figure(figsize=(12, 8))

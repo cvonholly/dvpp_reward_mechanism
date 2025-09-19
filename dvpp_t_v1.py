@@ -1,6 +1,5 @@
 """
 DVPP consisting of Solar PV, Wind and Battery 
-    with non-constraining energy limits
     non-stochastic PV=Wind generation
 """
 
