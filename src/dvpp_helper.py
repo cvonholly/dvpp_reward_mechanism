@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from src.get_controllers import get_pi_controller
 
-from src.get_device_systems import get_adaptive_dc_sys, get_adaptive_saturation_sys, get_ADPF
+from src.get_device_systems import get_adaptive_dc_sys, get_adaptive_saturation_sys, get_ADPF, get_static_pf_varying_ref
 
 
 def get_DVPP(IO_dict,
@@ -99,6 +99,8 @@ def get_DVPP(IO_dict,
     elif not STATIC_PF and adaptive_func!={}:
         mks = get_ADPF(lpf_devices, bpf_devices, hpf_devices, 
                        IO_dict, sum_service_rating, Gs_diff, adaptive_func, T_END=tlim[1])
+    elif STATIC_PF and adaptive_func!={}:
+        mks = get_static_pf_varying_ref(IO_dict, adaptive_func)
     else:
         # every device is treated equally
         theta_i = 1 / (len(lpf_devices) + len(bpf_devices) + len(hpf_devices))
@@ -119,7 +121,8 @@ def get_DVPP(IO_dict,
     t = np.linspace(tlim[0], tlim[1], n_points)
     x0 = [0, 0]
     service_rating = max(sum_service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
-    vref = service_rating * vref   # sacel by rating
+    vref = service_rating * vref   # scale by rating
+
     for k, name, G in zip(range(n_devices), names, all_devices):
         print('Running for device:', name)
         # each plant has their own desired transfer function, namely mks[name] from y -> y_i

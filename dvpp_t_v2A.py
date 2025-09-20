@@ -31,7 +31,7 @@ if __name__ == '__main__':
                 
     run_dvpp_simulation(get_io_dict,
                         save_path='pics/v2A',
-                        STATIC_PF=False,
+                        STATIC_PF=True,
                         # services_input={'FFR': get_ffr()},
                         make_PV_Wind_stochastic=False,
                         Sx=1,

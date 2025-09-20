@@ -142,6 +142,19 @@ def get_ADPF(lpf_devices, bpf_devices, hpf_devices,
                                                   D=np.array([[.75 if T_END>40 else 1]]))   # Fix fastest device’s ADPF as HPF
     return mks
 
+def get_static_pf_varying_ref(IO_dict, adaptive_func):
+    mks = {}
+    time_constants = get_time_constants()
+    sum_service_rating = sum([specs[2] for _, specs in IO_dict.items()])
+    for name, _ in IO_dict.items():
+        theta_i = IO_dict[name][2] / sum_service_rating
+        if name in adaptive_func:
+            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
+        else:
+            mks[name] = ct.tf([theta_i], [time_constants[name], 1])  # Define steady-state ADPFs as LPFs
+    return mks
+
+
 def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1):
     """
     params:
