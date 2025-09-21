@@ -10,6 +10,7 @@ import itertools
 from src.dvpp_helper import get_DVPP   # DVPP_2_devices, DVPP_3_devices, DVPP_4_devices, plot_DVPP_2_devices
 from src.get_single_cl import get_single_cl
 from src.get_controllers import get_pi_controller
+from src.get_device_systems import get_time_constants
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
 """
@@ -69,7 +70,7 @@ def simulate_devices_and_limits(IO_dict: dict,
         pi_params[name]['saturation_limits'] = (-specs[2], specs[2])  # -rating, +rating
     PIs = {name: get_pi_controller(params=pi_params[name]) for name in my_names}  
 
-    # define error signal
+    # create summing junction for error
     error = ct.summing_junction(['yref', '-y'], 'e')
 
     # define u, e as output as well
@@ -83,6 +84,8 @@ def simulate_devices_and_limits(IO_dict: dict,
     # example: Solar PV LPF, Wind LPF and Battery HPF
       # scales of the reference/hard constraints to test
     pf_name = 'Static PF' if STATIC_PF else 'Dynamic PF'
+    if x_scenario > 1:
+        pf_name += f' Scenario {x_scenario}'
     my_names = my_names   # specify otherwise if needed
     tau_c = 0.081             # 0.081 in Verena paper
 
@@ -96,7 +99,7 @@ def simulate_devices_and_limits(IO_dict: dict,
         # check if fulfills requirements
         g_cl = Closed_Loop_systems[name]
         reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
-                            name, tlim=[0, T_MAX],title=f'{title} {name} {pf_name} Scenario={x_scenario}',
+                            name, tlim=[0, T_MAX],title=f'{title} {name} {pf_name}',
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
                             scales_hard_constrains=scales_hard_constrains,
@@ -125,7 +128,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                             save_plots=save_plots,
                             save_path=save_path,
                             tau_c=tau_c,
-                            title=f'{title} {"+".join(subset)} {pf_name} Scenario={x_scenario}',
+                            title=f'{title} {"+".join(subset)} {pf_name}',
                             STATIC_PF=STATIC_PF,
                             price=price,
                             save_pics=save_pics,

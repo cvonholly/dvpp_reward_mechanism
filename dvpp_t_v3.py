@@ -12,11 +12,12 @@ if __name__ == '__main__':
     # run simulation with default parameters
     def get_io_dict():
         return {'Hydro': (get_hydro_tf(), 'lpf', 1),
-                'BESS': (get_bess_energy_sys(e_max=1.8), 'hpf', 1),
+                'BESS': (get_bess_energy_sys(e_max=3.3), 'bpf', 1),
                 'SC': (get_sc_io_sys(t_drop=5), 'hpf', 1),
                 }
+    # e_max calculation: 1k t-points, meaning we integrate 1000x during interval. If output is 1MW
                 
     run_dvpp_simulation(get_io_dict,
                         save_path='pics/v3',
-                        STATIC_PF=True
+                        STATIC_PF=False
                         )

@@ -1,9 +1,10 @@
 # shapely value of coalition
 
-import itertools
 import math as mt
 import scipy.optimize as opt
 from itertools import combinations, chain
+import numpy as np
+from scipy.optimize import linprog
 
 
 def powerset(iterable):
