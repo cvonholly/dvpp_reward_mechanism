@@ -5,7 +5,32 @@ import scipy.optimize as opt
 from itertools import combinations, chain
 import numpy as np
 from scipy.optimize import linprog
+import pandas as pd
 
+
+def get_banzhaf_value(v: dict, players: list, normalized=True) -> dict:
+    """
+    get Banzhaf values for each player
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    players: list of players
+    """
+    factor = 1 / (2 ** (len(players) - 1))
+    banzhaf_values = {p: 0 for p in players}
+    for S in powerset(players):
+        if S:  # skip 
+            for p in S:
+                subset_wo_p = frozenset(c for c in S if c != p)
+                marginal_contribution = v.get(S) - v.get(subset_wo_p)
+                banzhaf_values[p] += marginal_contribution
+    banzhaf_values = {k: v * factor for k, v in banzhaf_values.items()}
+    if normalized:
+        total_banzhaf = sum(banzhaf_values.values())
+        reward = v[frozenset(players)]
+        if total_banzhaf > 0:
+            banzhaf_values = {k: v * (reward / total_banzhaf) for k, v in banzhaf_values.items()}
+    return banzhaf_values
 
 def powerset(iterable):
     "Subsequences of the iterable from shortest to longest."
@@ -64,7 +89,9 @@ def get_loo(v: dict, players: list, normalized=True) -> dict:
     grand_coalition = frozenset(players)
     for p in players:
         subset_wo_p = frozenset(c for c in players if c != p)
-        loo_values[p] = v.get(grand_coalition) - v.get(subset_wo_p)
+        diff = v.get(grand_coalition) - v.get(subset_wo_p)
+        if diff < 0: diff=0
+        loo_values[p] = diff
     if normalized:
         total_loo = sum(loo_values.values())
         reward = v[grand_coalition]
