@@ -45,6 +45,23 @@ def run_dvpp_simulation(create_io_dict,
                         save_pics=True,
                         adaptive_func={}  # adaptive dynamic participation factor function
                         ):
+    """
+    create_io_dict: dict of devices with entries:
+        {(name): (ct.NonlinearIOSystem, device_type, rating)}
+    save_path: path to save the data frames and plots
+    services_input: dict of services with entries:
+        {(service_name): (time_series, max_input_curve, min_requirement_curve)}
+    service_diff: fraction of minimum service to supply. at 1 MW -> 0.1 * 1 MW = 0.1 MW
+    Sx: number of scenarios to simulate
+    make_PV_Wind_stochastic: if True, take dc gain from probability distribution
+    STATIC_PF: if True, use static participation factors, else dynamic
+    save_pics: if True, save the plots (not recommended for >8 scenarios)
+    adaptive_func: dict of adaptive functions for devices with entries:
+        {(name): function(t) -> [0, 1]}
+        where the functions ideally add up to 1 at each time step
+    ------------
+    """
+    
     
     wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  # time series of 15-minute dc gain
 
