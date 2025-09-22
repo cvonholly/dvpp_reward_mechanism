@@ -8,7 +8,7 @@ The files `dvpp_t_xxx.py` are the files to create and run a DVPP (see e.g. `pyth
 
 ## Results
 
-are visualized in `visualize.ipynb`
+Plots for all coalitions can be saved locally. Value and reward mechanisms are visualized in `visualize.ipynb`
 
 ## Requirements
 
