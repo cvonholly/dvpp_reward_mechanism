@@ -58,24 +58,47 @@ def is_convex_game(v: dict, players: list, tol=5e-2) -> bool:
                     return False
     return True
 
-# another convexity test: only grand coalition  vs. all other coalitions
-def check_convexity_grand_coalition(v: dict, players: list, tol=5e-2,
-                                    print_max_min_benefit=True) -> bool:
-    grand_coalition = frozenset(players)
-    max_benefit, min_benefit = 0, 1e12
-    for S in powerset(players):
-        if S and S != grand_coalition:
-            T = grand_coalition - S
-            diff = v[grand_coalition] + v[frozenset()] - v[S] - v[T]
-            max_benefit = max(max_benefit, diff)
-            min_benefit = min(min_benefit, diff)
-            if diff + tol < 0:
-                print(f"    Game is not Grand-Coalition convex: {str(S)}, {str(T)}, diff={diff:.2f}")
-                return False
-    print("    Grand-Coalition Convexity holds")
-    if print_max_min_benefit:
-        print(f"        Max benefit: {max_benefit:.2f}, Min benefit: {min_benefit:.2f}")
-    return True
+
+def core_nonempty(v, players):
+    """
+    Check if the core of a TU cooperative game is non-empty.
+
+    Parameters:
+    - v: dict mapping coalitions (as frozensets of players) -> value
+    - players: list of players
+
+    Returns:
+    - True if core is non-empty, False otherwise
+    """
+    N = len(players)
+    player_to_index = {p: i for i, p in enumerate(players)}
+
+    # Efficiency: sum x_i = v(N)
+    A_eq = [[1] * N]
+    b_eq = [v[frozenset(players)]]
+
+    # Inequalities: sum_{i in S} x_i >= v(S)
+    A_ub, b_ub = [], []
+    for r in range(1, N):  # skip empty and grand coalition
+        for S in combinations(players, r):
+            row = [0] * N
+            for i in S:
+                row[player_to_index[i]] = -1  # negate for <= constraint
+            A_ub.append(row)
+            b_ub.append(-v[frozenset(S)])
+
+    # Objective: irrelevant (feasibility), minimize 0
+    c = [0] * N
+
+    res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, method="highs")
+
+    if res.success:
+        print('Core is non-empty, one feasible allocation:', res.x)
+        return True  #, res.x
+    else:
+        return False   #, None
+
+
 
 def get_loo(v: dict, players: list, normalized=True) -> dict:
     """
