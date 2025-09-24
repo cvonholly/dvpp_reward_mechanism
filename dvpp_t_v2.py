@@ -21,6 +21,6 @@ if __name__ == '__main__':
                         save_path='pics/v2',
                         STATIC_PF=False,
                         make_PV_Wind_stochastic=True,
-                        Sx=15,
+                        Sx=20,
                         save_pics=False
                         )

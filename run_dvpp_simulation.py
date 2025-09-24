@@ -28,7 +28,7 @@ import pandas as pd
 
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
-from src.get_device_systems import get_time_constants
+from src.get_device_systems import get_time_constants, get_adpfs
 
 # import procduction data
 from src.time_varying_dc_gain import get_wind_solar_dc_gains
@@ -43,7 +43,9 @@ def run_dvpp_simulation(create_io_dict,
                         make_PV_Wind_stochastic=False,   # take dc gain from probability distribution
                         STATIC_PF=False,
                         save_pics=True,
-                        adaptive_func={}  # adaptive dynamic participation factor function
+                        adaptive_func={},  # adaptive dynamic participation factor function
+                        change_roles_for_services={},
+                        set_service_rating={}
                         ):
     """
     create_io_dict: dict of devices with entries:
@@ -74,7 +76,14 @@ def run_dvpp_simulation(create_io_dict,
     
     time_constants = get_time_constants()  # get dict with time constants
 
-    Gs_diff = {k: ct.tf([1], [time_constants[k], 1]) for k in my_names}   # get 1st order transfer functions / reference
+    # get dynamic participation factors
+    dpfs = {}
+    dpfs_set = get_adpfs()  # get dict with adpfs
+    for name in my_names:
+        if name in dpfs_set.keys():
+            dpfs[name] = dpfs_set[name]
+        else:
+            dpfs[name] = ct.tf([1], [time_constants[name], 1])   # get 1st order transfer functions / reference
 
     # set scenarios
     if Sx > 1:
@@ -97,6 +106,9 @@ def run_dvpp_simulation(create_io_dict,
         for i, idx in enumerate(selected_indices):
             print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, index {idx} \n')
             IO_dict = create_io_dict()    # reset io dict for each service
+            if change_roles_for_services:
+                for name, new_type in change_roles_for_services.get(service, {}).items():
+                    IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
             if make_PV_Wind_stochastic:   # adjust dc gain
                 dc_gain_Wind = wind_solar_dc_gains['Wind'].iloc[idx] * power_ratings_dict['Wind']
                 dc_gain_PV = wind_solar_dc_gains['Solar'].iloc[idx] * power_ratings_dict['PV']
@@ -119,9 +131,11 @@ def run_dvpp_simulation(create_io_dict,
                                         STATIC_PF=STATIC_PF,
                                         x_scenario=i+1,
                                         price=price,  # specify scenario if needed from 1...Sx,
-                                        Gs_diff=Gs_diff,
+                                        dpfs=dpfs,
                                         save_pics=save_pics,
-                                        adaptive_func=adaptive_func
+                                        adaptive_func=adaptive_func,
+                                        service=service,
+                                        set_service_rating=set_service_rating
             )
             if Sx == 1:
                 all_values[service] = VALUE

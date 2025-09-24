@@ -26,17 +26,20 @@ def simulate_devices_and_limits(IO_dict: dict,
                               pi_params: dict,
                               input_service_max: np.ndarray,
                               curve_service_min: np.ndarray,
+                              dpfs: dict,  # specify dynamic participation factors
                               title: str='',
                               T_MAX=60,
                               save_path='pics/FFR',
                               service_diff = 0.1, # fraction of minimum service to supply. at 1 MW -> 0.1 * 1 MW = 0.1 MW
                               STATIC_PF = False,   # use static instead of dynamic
-                              Gs_diff = {},  # specify different transfer functions for some devices
+                              
                               save_plots = True,
                               save_pics = True,
                               x_scenario = 0,  # specify scenario if needed from 1...Sx
                               price = 1,
-                              adaptive_func={}
+                              adaptive_func={},
+                              service='FCR',
+                              set_service_rating=None,
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -117,9 +120,15 @@ def simulate_devices_and_limits(IO_dict: dict,
         for subset in itertools.combinations(my_names, i):
             print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
+            # set service rating
+            # sum of ratings of LPF devices only, except for FFR where all devices can have enough energy to contribute
+            if set_service_rating:
+                sum_service_rating = set_service_rating[service]
+            else:
+                sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
             reward, energy_dict, get_peak_power = get_DVPP(
                             IO_dict=subset_io_dict,
-                            pi_params=pi_params, Gs_diff=Gs_diff, 
+                            pi_params=pi_params, dpfs=dpfs, 
                             vref=input_service_max, min_hard_constrains=curve_service_min,
                             scales_hard_constrains=scales_hard_constrains,
                             tlim=[0, T_MAX],
@@ -132,7 +141,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                             STATIC_PF=STATIC_PF,
                             price=price,
                             save_pics=save_pics,
-                            adaptive_func=adaptive_func
+                            adaptive_func=adaptive_func,
+                            sum_service_rating=sum_service_rating
                             )
 
             VALUE[subset] = reward
