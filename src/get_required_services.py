@@ -35,9 +35,10 @@ def get_fcr(T_MAX_FCR=60, n_points=1000,
 def get_fcr_d(T_MAX=60, n_points=1000,
               make_step=True):
     D1 = .86  # at 7.5s
+    DFINAL = 1
     DMAX = 1  # maximum overshoot is 20% so reference is not allowed to be above 1.2*D1
     START = DMAX if make_step else 0
-    require_fcr_d = {(0.05, 7.5): (0, D1), (7.5, T_MAX): (D1, D1)}
+    require_fcr_d = {(0.05, 7.5): (0, D1), (7.5, T_MAX): (D1, DFINAL)}
     require_fcr_d_max = {(0, 7.5): (START, DMAX), (7.5, T_MAX): (DMAX, DMAX)}
     ts_fcr_d_max, input_fcr_d_max = create_curve(require_fcr_d_max, t_max=T_MAX, n_points=n_points)
     _, curve_fcr_d_min = create_curve(require_fcr_d, t_max=T_MAX, n_points=n_points)  # minimum curve

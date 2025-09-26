@@ -87,8 +87,15 @@ def run_dvpp_simulation(create_io_dict,
 
     # set scenarios
     if Sx > 1:
-        ps = probs_15_min.iloc[:, 0].values
+        ps = probs_15_min.iloc[:, 0].values # select FFR probabilities for now
         selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
+        # save selected scenarios to csv
+        df_scenarios =pd.DataFrame(selected_indices, columns=['selected_indices'])
+        # add prices
+        df_scenarios['FFR price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 0])
+        df_scenarios['FCR-D up price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 1])
+        # save
+        df_scenarios.to_csv(f'{save_path}/selected_scenarios.csv', index=False)
     if Sx == 1:
         # set price to average non-zero price
         price = prices[prices>0].mean()
@@ -118,6 +125,12 @@ def run_dvpp_simulation(create_io_dict,
             price = prices.iloc[idx, 0] if service=='FFR' else prices.iloc[idx, 1]
             my_path = save_path + '/' + service.replace('-', '_')
 
+            if Sx > 1:
+                # set save_pics_i to function, otherwise false
+                save_pics_i = save_pics(i)
+            else:
+                save_pics_i = save_pics
+
             # service response
             VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
                                         IO_dict=IO_dict,
@@ -132,7 +145,7 @@ def run_dvpp_simulation(create_io_dict,
                                         x_scenario=i+1,
                                         price=price,  # specify scenario if needed from 1...Sx,
                                         dpfs=dpfs,
-                                        save_pics=save_pics,
+                                        save_pics=save_pics_i,
                                         adaptive_func=adaptive_func,
                                         service=service,
                                         set_service_rating=set_service_rating

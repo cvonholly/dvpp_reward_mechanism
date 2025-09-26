@@ -125,7 +125,7 @@ def simulate_devices_and_limits(IO_dict: dict,
             if set_service_rating:
                 sum_service_rating = set_service_rating[service]
             else:
-                sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
+                sum_service_rating = sum([v[2] for v in subset_io_dict.values()])   # sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else 
             reward, energy_dict, get_peak_power = get_DVPP(
                             IO_dict=subset_io_dict,
                             pi_params=pi_params, dpfs=dpfs, 
