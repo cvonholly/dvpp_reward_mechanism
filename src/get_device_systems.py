@@ -13,6 +13,7 @@ def get_time_constants() -> dict:
     constants['SC'] = 0.01
     Rg, Rt, taur = 0.03, 0.38, 5
     constants['Hydro'] = 5 # test Rt/Rg*taur  # from Verena paper
+    constants['tau_c'] = 0.081   # time constant used in verenas paper
     return constants
 
 def get_adpfs() -> dict:
@@ -145,6 +146,45 @@ def get_ADPF(lpf_devices, bpf_devices, hpf_devices,
              T_END=60):
     """
     built non-linear time variant ADPFs
+
+    important:
+        adaptive_func gains always have to add up to 1 (e.g. sin(t)^2 + cos(t)^2 = 1)
+            otherwise the DVPP will not track the reference properly
+
+    """
+    # restricted_devices = list(adaptive_func.keys())  # devices which are restricted by time-varying production
+    mks = {}
+    time_constants = get_time_constants()
+    lpf_names = list(lpf_devices.keys())
+    thetas = {}
+    for name, _  in lpf_devices.items():
+        theta_i = IO_dict[name][2] / sum_service_rating
+        thetas[name] = theta_i
+        if name not in adaptive_func:
+            mks[name] = dpfs[name] * theta_i  # ADPF is DPF
+        else:
+            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
+    # todo: implement bpf devices
+    # for name, g in bpf_devices.items():
+    #     if name in Gs_diff: g = Gs_diff[name]  # take other tranfer function if specified
+    #     mks[name] = g * (g - Gs_sum)   # Fix intermediate ADPFs as BPFs
+    #     Gs_sum += g * (g - Gs_sum)
+    for name, _ in hpf_devices.items():
+        if len(lpf_names) == 1:
+            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
+        elif len(lpf_names) == 2:
+            mks[name] = get_adaptive_hpf_for_2lpf(time_constants[lpf_names[0]], time_constants[lpf_names[1]], adaptive_func[lpf_names[0]], adaptive_func[lpf_names[1]],
+                                                  thetas[lpf_names[0]], thetas[lpf_names[1]],
+                                                  D=np.array([[.75 if T_END>1e3 else 1]])
+                                                  )   # Fix fastest device’s ADPF as HPF
+    return mks
+
+def get_DPF(lpf_devices, bpf_devices, hpf_devices, 
+             IO_dict, sum_service_rating, dpfs, adaptive_func,
+             tau_c=0,
+             T_END=60):
+    """
+    built non-linear time-constant but dynamic participation factors
 
     important:
         adaptive_func gains always have to add up to 1 (e.g. sin(t)^2 + cos(t)^2 = 1)

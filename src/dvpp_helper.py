@@ -89,7 +89,7 @@ def get_DVPP(IO_dict,
     n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
 
     # Dynamic Participation Factors
-    if not STATIC_PF and adaptive_func=={}:
+    if (not STATIC_PF and adaptive_func=={}) or (STATIC_PF=='DPF' and adaptive_func!={}):
         for name, g in lpf_devices.items():
             g = IO_dict[name][2] / sum_service_rating * dpfs[name]  # compute dynamic participation factor
             mks[name] = g  # Define steady-state ADPFs as LPFs
@@ -104,12 +104,8 @@ def get_DVPP(IO_dict,
     elif not STATIC_PF and adaptive_func!={}:
         mks = get_ADPF(lpf_devices, bpf_devices, hpf_devices, 
                        IO_dict, sum_service_rating, dpfs, adaptive_func, T_END=tlim[1], tau_c=tau_c)
-    #
-    # todo: add dynamic but not adaptive participation factors
-    # (does not make sens in my head but ok)
-    #
-    elif STATIC_PF and adaptive_func!={}:
-        mks = get_static_pf_varying_ref(IO_dict, adaptive_func)
+    # elif STATIC_PF and adaptive_func!={}:
+    #     mks = get_static_pf_varying_ref(IO_dict, adaptive_func)
     # todo add option for dynamic but not adaptive participation factors
     else:
         # static participation factors
@@ -149,6 +145,7 @@ def get_DVPP(IO_dict,
             hydro_error = responses['Hydro'].outputs[-1].tolist()
             error = ct.summing_junction([f'ref_y{k+1}', 'hydro_error', f'-y{k+1}'], f'e{k+1}', name=f'err_{name}')  # error signal
 
+        # set PI controller and saturation block, if time-varying (adaptive) use adaptive version
         if name in adaptive_func:
             pi_params[name]['adaptive_func'] = adaptive_func[name]
             PI = get_pi_controller_adaptive(params=pi_params[name])

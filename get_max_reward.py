@@ -73,24 +73,28 @@ def simulate_devices_and_limits(IO_dict: dict,
         pi_params[name]['saturation_limits'] = (-specs[2], specs[2])  # -rating, +rating
     PIs = {name: get_pi_controller(params=pi_params[name]) for name in my_names}  
 
+    # same delay as for dpf's
+    small_delay = ct.tf([1], [get_time_constants()['tau_c'], 1], inputs='yref', outputs='yref_delay')
+
     # create summing junction for error
-    error = ct.summing_junction(['yref', '-y'], 'e')
+    error = ct.summing_junction(['yref_delay', '-y'], 'e')
 
     # define u, e as output as well
     u_out = ct.summing_junction(['u'], 'u_out')
     err_out = ct.summing_junction(['e'], 'err_out')
 
     # create closed-loop systems
-    Closed_Loop_systems = {name: ct.interconnect([PIs[name], IO_dict[name][0], error, u_out, err_out], inputs=['yref'], outputs=['y', 'u_out', 'err_out']) for name in my_names}
+    Closed_Loop_systems = {name: ct.interconnect([small_delay, error, PIs[name], IO_dict[name][0], u_out, err_out], inputs=['yref'], outputs=['y', 'u_out', 'err_out']) for name in my_names}
 
     ## SET PARAMS FOR DVPP
     # example: Solar PV LPF, Wind LPF and Battery HPF
       # scales of the reference/hard constraints to test
-    pf_name = 'Static PF' if STATIC_PF else 'Dynamic PF'
+    pf_name = 'SPF' if STATIC_PF else 'DPF'
+    pf_name = 'ADPF' if (adaptive_func!={} and STATIC_PF!='DPF' and STATIC_PF) else pf_name
     if x_scenario > 1:
         pf_name += f' Scenario {x_scenario}'
-    my_names = my_names   # specify otherwise if needed
-    tau_c = 0.081             # 0.081 in Verena paper
+    my_names = my_names       # specify otherwise if needed
+    tau_c = get_time_constants()['tau_c']             # 0.081 in Verena paper
 
 
     # create value function
