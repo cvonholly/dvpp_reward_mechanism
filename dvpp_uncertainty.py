@@ -26,9 +26,10 @@ if __name__ == '__main__':
                 
     run_dvpp_simulation(get_io_dict,
                         save_path='pics/vu2',
-                        STATIC_PF=True,
+                        STATIC_PF=False,
                         make_PV_Wind_stochastic=True,
-                        Sx=3,
+                        Sx=20,
                         save_pics=save_pics,
-                        calc_1st_stage_reward=True
+                        calc_1st_stage_reward=True,
+                        include_battery_uncertainty=True
                         )

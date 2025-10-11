@@ -7,7 +7,8 @@ computes time-varying DC gains for Solar PV, Wind Turbine and Battery
 import numpy as np
 import pandas as pd
 
-def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
+def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
+                            path='data/data_wind_solar_2024_25.csv'):
     """
     gets production data for entire year
 
@@ -16,7 +17,7 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
     - (optional) probability distribution of FFR and FCR procurement
     - (optional) price distribution of FFR and FCR-D prices
     """
-    df = pd.read_csv('data/data_wind_solar_2024_25.csv', sep=';')
+    df = pd.read_csv(path, sep=';')
     df.drop('endTime', inplace=True, axis=1)
     df.rename(columns={'startTime': 'Datum'}, inplace=True)
     df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
@@ -50,6 +51,17 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
         return df_mean, final_dfs[0], final_dfs[1]
 
     return df_mean
+
+def datetime_to_idx(datetime_idx):
+    """
+    convert datetime to index range 0-671 representing:
+        day of week (0-6) * 24 * 4 + hour of day (0-23) * 4 + quarter of hour (0-3)
+    """
+    day_of_week = datetime_idx.weekday()  # Monday=0, Sunday=6
+    hour_of_day = datetime_idx.hour
+    quarter_of_hour = datetime_idx.minute // 15
+    index = day_of_week * 24 * 4 + hour_of_day * 4 + quarter_of_hour
+    return index
 
 
 def get_wind_solar_dc_gains_weekly(get_probability_and_prices_distribution=True):

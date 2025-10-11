@@ -39,7 +39,7 @@ def powerset(iterable):
     x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
     return [frozenset(comb) for comb in x]
 
-def is_convex_game(v: dict, players: list, tol=5e-2,
+def is_convex_game(v: dict, players: list, tol=5e-3,
                    print_warnings=False) -> bool:
     """
     Check if a coalition game is convex.

@@ -28,10 +28,10 @@ import pandas as pd
 
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
-from src.get_device_systems import get_special_pfs, get_time_constants, get_special_pfs
+from src.get_device_systems import get_bess_energy_sys, get_special_pfs, get_time_constants, get_special_pfs
 
 # import procduction data
-from src.time_varying_dc_gain import get_wind_solar_dc_gains
+from src.time_varying_dc_gain import get_wind_solar_dc_gains, datetime_to_idx
 from src.get_required_services import *
 
 from src.get_pv_wind_probs import get_pv_wind_probs
@@ -48,7 +48,8 @@ def run_dvpp_simulation(create_io_dict,
                         adaptive_func={},  # adaptive dynamic participation factor function
                         change_roles_for_services={},
                         set_service_rating={},
-                        calc_1st_stage_reward=False 
+                        calc_1st_stage_reward=False,
+                        include_battery_uncertainty=False
                         ):
     """
     create_io_dict: dict of devices with entries:
@@ -113,6 +114,9 @@ def run_dvpp_simulation(create_io_dict,
         prices = pd.DataFrame([price], columns=prices.columns, index=[0])
         selected_indices = [0]
 
+    if include_battery_uncertainty:
+        df_bat = pd.read_csv('data/battery_soc_profile.csv', sep=';', index_col=0)
+
     
     for service, (ts, input, requirement_curve) in services_input.items():
         #
@@ -133,6 +137,12 @@ def run_dvpp_simulation(create_io_dict,
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
+            if include_battery_uncertainty:
+                # get battery SoC for time
+                idx_bat = datetime_to_idx(time_stamps[i])
+                soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
+                IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
+
             price = prices.iloc[idx, 0] if service=='FFR' else prices.iloc[idx, 1]
             my_path = save_path + '/' + service.replace('-', '_')
 
@@ -178,6 +188,11 @@ def run_dvpp_simulation(create_io_dict,
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
+                if include_battery_uncertainty:
+                    # get battery SoC for time
+                    idx_bat = datetime_to_idx(time_stamps[i])
+                    soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
+                    IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
 
                 # service response
                 VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
