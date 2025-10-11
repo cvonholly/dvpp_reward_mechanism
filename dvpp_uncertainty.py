@@ -25,7 +25,7 @@ if __name__ == '__main__':
         return i < 2  # save pics for first 2 scenarios only
                 
     run_dvpp_simulation(get_io_dict,
-                        save_path='pics/v2',
+                        save_path='pics/vu2',
                         STATIC_PF=True,
                         make_PV_Wind_stochastic=True,
                         Sx=3,

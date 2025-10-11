@@ -168,9 +168,10 @@ def run_dvpp_simulation(create_io_dict,
 
             if calc_1st_stage_reward:
                 # get forecasted values
+                IO_dict = create_io_dict()    # reset io dict for each service
                 day = time_stamps[i].tz_localize(None)
                 hour = day.hour
-                forecast_PV, forecast_Wind = get_pv_wind_probs(day)
+                forecast_PV, forecast_Wind = get_pv_wind_probs(day, df_path='data/data_wind_solar_2024_25.csv')
                 forecast_PV, forecast_Wind = forecast_PV[hour], forecast_Wind[hour]
                 dc_gain_Wind = forecast_Wind * power_ratings_dict['Wind']
                 dc_gain_PV = forecast_PV * power_ratings_dict['PV']

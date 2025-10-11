@@ -9,11 +9,7 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
     get hourly beta distribution parameters for PV and Wind generation
     
     params:
-        day: dict or str to be converted with pd.to_datetime
-            e.g. {'year': [2024],
-                   'month': [11],
-                   'day': [1]}
-            e.g. '2024-06-21' for summer solstice, '2024-12-21' for winter solstice
+        day: pd.Timestamp, day to center the ±1 month window around
     """
     # format df
     df = pd.read_csv(df_path, sep=';')
@@ -32,6 +28,8 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
     start = day - pd.DateOffset(months=1)
     end = day + pd.DateOffset(months=1)
     df_window = df.loc[start:end]
+    # remove non-finfite values
+    df_window = df_window[np.isfinite(df_window).all(axis=1)]
 
     # Solar: fit Beta distribution
     df_s = df_window['Solar']
@@ -54,5 +52,5 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
 
 if __name__ == '__main__':
     # Example usage
-    day = None
-    hourly_pv_mean, hourly_wind_mean = get_pv_probs(day)
+    day = pd.Timestamp('2024-12-15')
+    hourly_pv_mean, hourly_wind_mean = get_pv_wind_probs(day)
