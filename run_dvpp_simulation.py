@@ -28,11 +28,13 @@ import pandas as pd
 
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
-from src.get_device_systems import get_time_constants, get_adpfs
+from src.get_device_systems import get_special_pfs, get_time_constants, get_special_pfs
 
 # import procduction data
 from src.time_varying_dc_gain import get_wind_solar_dc_gains
 from src.get_required_services import *
+
+from src.get_pv_wind_probs import get_pv_wind_probs
 
 
 def run_dvpp_simulation(create_io_dict,
@@ -45,7 +47,8 @@ def run_dvpp_simulation(create_io_dict,
                         save_pics=True,
                         adaptive_func={},  # adaptive dynamic participation factor function
                         change_roles_for_services={},
-                        set_service_rating={}
+                        set_service_rating={},
+                        calc_1st_stage_reward=False 
                         ):
     """
     create_io_dict: dict of devices with entries:
@@ -61,14 +64,16 @@ def run_dvpp_simulation(create_io_dict,
     adaptive_func: dict of adaptive functions for devices with entries:
         {(name): function(t) -> [0, 1]}
         where the functions ideally add up to 1 at each time step
+    calc_1st_stage_reward:
+        if True, calculate the 1st stage reward based on forecasted generation
     ------------
     """
-    
-    
-    wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  # time series of 15-minute dc gain
+    # time series of 15-minute dc gain
+    wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  
 
     # get all orders of coalitions
     all_values = {}
+    forecasted_values = {}
     power_ratings_dict = {name: vals[2] for name, vals in create_io_dict().items()}
     my_names = list(power_ratings_dict.keys())
 
@@ -78,19 +83,25 @@ def run_dvpp_simulation(create_io_dict,
 
     # get dynamic participation factors
     dpfs = {}
-    dpfs_set = get_adpfs()  # get dict with adpfs
+    dpfs_set = get_special_pfs()  # get dict with adpfs
     for name in my_names:
         if name in dpfs_set.keys():
             dpfs[name] = dpfs_set[name]
         else:
             dpfs[name] = ct.tf([1], [time_constants[name], 1])   # get 1st order transfer functions / reference
 
+    # set name for participation factors
+    pf_name = 'SPF' if STATIC_PF else 'DPF'
+    pf_name = 'ADPF' if (adaptive_func!={} and STATIC_PF=='ADPF') else pf_name
+
     # set scenarios
     if Sx > 1:
         ps = probs_15_min.iloc[:, 0].values # select FFR probabilities for now
+        # select Sx scenarios based on probabilities
         selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
+        time_stamps = wind_solar_dc_gains.index[selected_indices]  # selected time stamps
         # save selected scenarios to csv
-        df_scenarios =pd.DataFrame(selected_indices, columns=['selected_indices'])
+        df_scenarios = pd.DataFrame(selected_indices, columns=['selected_indices'])
         # add prices
         df_scenarios['FFR price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 0])
         df_scenarios['FCR-D up price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 1])
@@ -141,7 +152,7 @@ def run_dvpp_simulation(create_io_dict,
                                         service_diff=service_diff,
                                         T_MAX=ts[-1],
                                         save_path=my_path,
-                                        STATIC_PF=STATIC_PF,
+                                        pf_name=pf_name,
                                         x_scenario=i+1,
                                         price=price,  # specify scenario if needed from 1...Sx,
                                         dpfs=dpfs,
@@ -154,8 +165,44 @@ def run_dvpp_simulation(create_io_dict,
                 all_values[service] = VALUE
             else:
                 all_values[(service, i)] = VALUE
-        
+
+            if calc_1st_stage_reward:
+                # get forecasted values
+                day = time_stamps[i].tz_localize(None)
+                hour = day.hour
+                forecast_PV, forecast_Wind = get_pv_wind_probs(day)
+                forecast_PV, forecast_Wind = forecast_PV[hour], forecast_Wind[hour]
+                dc_gain_Wind = forecast_Wind * power_ratings_dict['Wind']
+                dc_gain_PV = forecast_PV * power_ratings_dict['PV']
+                # adjust current io_dict
+                IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
+                IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
+
+                # service response
+                VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
+                                            IO_dict=IO_dict,
+                                            pi_params=pi_params,
+                                            input_service_max=input,
+                                            curve_service_min=requirement_curve,
+                                            title=f'FORECAST {service}',
+                                            service_diff=service_diff,
+                                            T_MAX=ts[-1],
+                                            save_path=my_path,
+                                            pf_name=pf_name,
+                                            x_scenario=i+1,
+                                            price=price,  # specify scenario if needed from 1...Sx,
+                                            dpfs=dpfs,
+                                            save_pics=save_pics_i,
+                                            adaptive_func=adaptive_func,
+                                            service=service,
+                                            set_service_rating=set_service_rating
+                )
+                forecasted_values[(service, i)] = VALUE
+
     # save values and shapely values
-    pf_name = 'stat' if STATIC_PF else 'dyn'
     df = pd.DataFrame.from_dict(all_values, orient='index')
     df.to_csv(f'{save_path}/values_{pf_name}.csv', float_format='%.5f')
+
+    if calc_1st_stage_reward:
+        df_forecast = pd.DataFrame.from_dict(forecasted_values, orient='index')
+        df_forecast.to_csv(f'{save_path}/values_forecasted_{pf_name}.csv', float_format='%.5f')

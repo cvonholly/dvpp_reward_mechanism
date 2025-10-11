@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from src.get_controllers import get_pi_controller, get_pi_controller_adaptive
 
-from src.get_device_systems import get_ADPF, get_static_pf_varying_ref, get_adpfs
+from src.get_device_systems import get_ADPF #, get_static_pf_varying_ref
 
 
 def get_DVPP(IO_dict,
@@ -19,7 +19,7 @@ def get_DVPP(IO_dict,
             get_peak_power=False,
             save_plots=True,
             tau_c=1e-4,
-            STATIC_PF=False,
+            pf_name=False,
             min_service_rating=0.1,
             n_points=1000,
             price=1,
@@ -89,19 +89,19 @@ def get_DVPP(IO_dict,
     n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
 
     # Dynamic Participation Factors
-    if (not STATIC_PF and adaptive_func=={}) or (STATIC_PF=='DPF' and adaptive_func!={}):
+    if pf_name=='DPF':
         for name, g in lpf_devices.items():
             g = IO_dict[name][2] / sum_service_rating * dpfs[name]  # compute dynamic participation factor
-            mks[name] = g  # Define steady-state ADPFs as LPFs
+            mks[name] = g  # Define steady-state DPFs as LPFs
             Gs_sum += g
         for name, g in bpf_devices.items():
             g = dpfs[name]  # compute dynamic participation factor
-            mks[name] = g * (g - Gs_sum)   # Fix intermediate ADPFs as BPFs
+            mks[name] = g * (g - Gs_sum)   # Fix intermediate DPFs as BPFs
             Gs_sum += g * (g - Gs_sum)
         for name, g in hpf_devices.items():
-            mks[name] = ct.tf([1], [tau_c, 1]) - Gs_sum   # Fix fastest device’s ADPF as HPF
+            mks[name] = ct.tf([1], [tau_c, 1]) - Gs_sum   # Fix fastest device’s DPFs as HPF
     # Adaptive Dynamic Participation Factors
-    elif not STATIC_PF and adaptive_func!={}:
+    elif pf_name=='ADPF':
         mks = get_ADPF(lpf_devices, bpf_devices, hpf_devices, 
                        IO_dict, sum_service_rating, dpfs, adaptive_func, T_END=tlim[1], tau_c=tau_c)
     # elif STATIC_PF and adaptive_func!={}:
@@ -112,11 +112,11 @@ def get_DVPP(IO_dict,
         # every device is treated equally
         theta_i = 1 / (len(lpf_devices) + len(bpf_devices) + len(hpf_devices))
         for name, g in lpf_devices.items():
-            mks[name] = ct.tf([theta_i], [1]) 
+            mks[name] = ct.tf([theta_i], [tau_c, 1]) 
         for name, g in bpf_devices.items():
-            mks[name] = ct.tf([theta_i], [1]) 
+            mks[name] = ct.tf([theta_i], [tau_c, 1]) 
         for name, g in hpf_devices.items():
-            mks[name] = ct.tf([theta_i], [1])  
+            mks[name] = ct.tf([theta_i], [tau_c, 1])  
     
     # next, simulate devices individually
     names = [k for k in lpf_devices.keys()] + [k for k in bpf_devices.keys()] + [k for k in hpf_devices.keys()]

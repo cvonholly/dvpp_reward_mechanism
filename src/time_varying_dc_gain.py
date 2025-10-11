@@ -7,10 +7,54 @@ computes time-varying DC gains for Solar PV, Wind Turbine and Battery
 import numpy as np
 import pandas as pd
 
-
 def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
     """
-    assumption: generation data is in 15 min intervals (see Fingrid website)
+    gets production data for entire year
+
+    returns:
+    - production per 15-minute as DC gain, meaned by max value
+    - (optional) probability distribution of FFR and FCR procurement
+    - (optional) price distribution of FFR and FCR-D prices
+    """
+    df = pd.read_csv('data/data_wind_solar_2024_25.csv', sep=';')
+    df.drop('endTime', inplace=True, axis=1)
+    df.rename(columns={'startTime': 'Datum'}, inplace=True)
+    df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
+    df.set_index('Datum', inplace=True)
+    df.columns = ['Wind', 'Solar']
+    # normalize by max values
+    max_vals = df.max()
+    df_mean = df / max_vals
+
+    final_dfs = []
+    if get_probability_and_prices_distribution:
+        paths = ['data/data_ffr_fcr_procurement_2024_25.csv', 'data/data_ffr_fcr_d_price_2024_25.csv']
+        for k, path in enumerate(paths):
+            df = pd.read_csv(path, sep=';')
+            df.drop('endTime', inplace=True, axis=1)
+            df.rename(columns={'startTime': 'Datum'}, inplace=True)
+            df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
+            df.set_index('Datum', inplace=True)
+            if k==0: df = df / df.sum()
+            # next, split up every row into 4 values for 15 min intervals
+            df = pd.DataFrame(np.repeat(df.values, 4, axis=0), columns=df.columns)
+            df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
+            if k==0: df = df / df.sum()
+            final_dfs.append(df)
+        # ensure they have same size
+        minlen = min([len(d) for d in final_dfs])
+        minlen = min(minlen, len(df_mean))
+        df_mean = df_mean.iloc[:minlen]
+        for df in final_dfs:
+            df = df.iloc[:minlen]
+        return df_mean, final_dfs[0], final_dfs[1]
+
+    return df_mean
+
+
+def get_wind_solar_dc_gains_weekly(get_probability_and_prices_distribution=True):
+    """
+    means production data over a typical week
 
     returns production per 15-minute (meaned over the week) as DC gain
     """
@@ -23,10 +67,13 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
     df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
     df.set_index('Datum', inplace=True)
     df.columns = ['Wind', 'Solar']
-    # get mean value
+    # get mean and std value
     df_mean = df.groupby([df.index.dayofweek, df.index.hour, df.index.minute]).mean()
-    # normalize to 1
-    df_mean = df_mean / df_mean.max()
+    df_std = df.groupby([df.index.dayofweek, df.index.hour, df.index.minute]).std()
+    # normalize by max values
+    max_vals = df.max()
+    df_mean = df_mean / max_vals
+    df_std = df_std / max_vals
 
     final_dfs = []
     if get_probability_and_prices_distribution:
@@ -46,6 +93,6 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True):
             if k==0: df = df / df.sum()
             final_dfs.append(df)
 
-        return df_mean, final_dfs[0], final_dfs[1]
+        return df_mean, df_std, final_dfs[0], final_dfs[1]
 
-    return df_mean
+    return df_mean, df_std

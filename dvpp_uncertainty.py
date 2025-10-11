@@ -1,6 +1,6 @@
 """
 DVPP consisting of Solar PV, Wind and Battery 
-    with stochastic PV=Wind generation
+    with uncertainty in Pv and Wind generation
 """
 
 # import procduction data
@@ -17,6 +17,10 @@ if __name__ == '__main__':
                 'BESS': (get_bess_energy_sys(e_max=10), 'hpf', 1),
                 }
     
+    # run scenarios with uncertainties
+    # 1. stage: coalition forming based on forecasted generation
+    # 2. stage: real-time operation based on actual generation
+
     def save_pics(i):
         return i < 2  # save pics for first 2 scenarios only
                 
@@ -24,6 +28,7 @@ if __name__ == '__main__':
                         save_path='pics/v2',
                         STATIC_PF=True,
                         make_PV_Wind_stochastic=True,
-                        Sx=10,
-                        save_pics=save_pics
+                        Sx=3,
+                        save_pics=save_pics,
+                        calc_1st_stage_reward=True
                         )

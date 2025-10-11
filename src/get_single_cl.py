@@ -43,10 +43,6 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
     service_rating = max(service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
     vref = service_rating * vref   # scale by rating
 
-    if name in adaptive_func:  # adapt reference if function is given
-        scaling = adaptive_func[name](t)
-        vref = vref * scaling
-
     # Simulate the closed-loop response
     response = ct.input_output_response(closed_loop, t, vref, x0,
                                         solve_ivp_method='LSODA')

@@ -16,7 +16,7 @@ def get_time_constants() -> dict:
     constants['tau_c'] = 0.081   # time constant used in verenas paper
     return constants
 
-def get_adpfs() -> dict:
+def get_special_pfs() -> dict:
     # get adpf for systems
     # only needed if adpf is not just 1st order time constant
     Rg, Rt = 0.03, 0.38
@@ -171,7 +171,7 @@ def get_ADPF(lpf_devices, bpf_devices, hpf_devices,
     #     Gs_sum += g * (g - Gs_sum)
     for name, _ in hpf_devices.items():
         if len(lpf_names) == 1:
-            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
+            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]], thetas[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
         elif len(lpf_names) == 2:
             mks[name] = get_adaptive_hpf_for_2lpf(time_constants[lpf_names[0]], time_constants[lpf_names[1]], adaptive_func[lpf_names[0]], adaptive_func[lpf_names[1]],
                                                   thetas[lpf_names[0]], thetas[lpf_names[1]],
@@ -179,65 +179,27 @@ def get_ADPF(lpf_devices, bpf_devices, hpf_devices,
                                                   )   # Fix fastest device’s ADPF as HPF
     return mks
 
-def get_DPF(lpf_devices, bpf_devices, hpf_devices, 
-             IO_dict, sum_service_rating, dpfs, adaptive_func,
-             tau_c=0,
-             T_END=60):
-    """
-    built non-linear time-constant but dynamic participation factors
 
-    important:
-        adaptive_func gains always have to add up to 1 (e.g. sin(t)^2 + cos(t)^2 = 1)
-            otherwise the DVPP will not track the reference properly
+# def get_static_pf_varying_ref(IO_dict, adaptive_func):
+#     """
+#     static PF for the time-varying production case
 
-    """
-    # restricted_devices = list(adaptive_func.keys())  # devices which are restricted by time-varying production
-    mks = {}
-    time_constants = get_time_constants()
-    lpf_names = list(lpf_devices.keys())
-    thetas = {}
-    for name, _  in lpf_devices.items():
-        theta_i = IO_dict[name][2] / sum_service_rating
-        thetas[name] = theta_i
-        if name not in adaptive_func:
-            mks[name] = dpfs[name] * theta_i  # ADPF is DPF
-        else:
-            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
-    # todo: implement bpf devices
-    # for name, g in bpf_devices.items():
-    #     if name in Gs_diff: g = Gs_diff[name]  # take other tranfer function if specified
-    #     mks[name] = g * (g - Gs_sum)   # Fix intermediate ADPFs as BPFs
-    #     Gs_sum += g * (g - Gs_sum)
-    for name, _ in hpf_devices.items():
-        if len(lpf_names) == 1:
-            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
-        elif len(lpf_names) == 2:
-            mks[name] = get_adaptive_hpf_for_2lpf(time_constants[lpf_names[0]], time_constants[lpf_names[1]], adaptive_func[lpf_names[0]], adaptive_func[lpf_names[1]],
-                                                  thetas[lpf_names[0]], thetas[lpf_names[1]],
-                                                  D=np.array([[.75 if T_END>1e3 else 1]])
-                                                  )   # Fix fastest device’s ADPF as HPF
-    return mks
-
-def get_static_pf_varying_ref(IO_dict, adaptive_func):
-    """
-    static PF for the time-varying production case
-
-    set theta_i = rating_i / sum(rating_j) for all i, j in devices
-    for time-varying production, get_adaptive_dc_sys(...) is used to scale the steady-state gain
-    """
-    mks = {}
-    time_constants = get_time_constants()
-    sum_service_rating = sum([specs[2] for _, specs in IO_dict.items()])
-    for name, _ in IO_dict.items():
-        theta_i = IO_dict[name][2] / sum_service_rating
-        if name in adaptive_func:
-            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
-        else:
-            mks[name] = ct.tf([theta_i], [time_constants[name], 1]) 
-    return mks
+#     set theta_i = rating_i / sum(rating_j) for all i, j in devices
+#     for time-varying production, get_adaptive_dc_sys(...) is used to scale the steady-state gain
+#     """
+#     mks = {}
+#     time_constants = get_time_constants()
+#     sum_service_rating = sum([specs[2] for _, specs in IO_dict.items()])
+#     for name, _ in IO_dict.items():
+#         theta_i = IO_dict[name][2] / sum_service_rating
+#         if name in adaptive_func:
+#             mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
+#         else:
+#             mks[name] = ct.tf([theta_i], [time_constants[name], 1]) 
+#     return mks
 
 
-def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1):
+def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1, theta1):
     """
     params:
         gain: function t -> theta where theta is time-varying dc gain
@@ -247,14 +209,16 @@ def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1):
     D = np.array([[1]])
 
     def update(t, x, u, params={}):
-        return A @ x + B @ u        
+        return params['A'] @ x + params['B'] @ u      
     
     def output(t, x, u, params={}):
-        C = np.array([[-adaptive_func1(t)]])
+        C = np.array([[-params['theta1'] * params['adaptive_func1'](t)]])
         return C @ x + D @ u
     
+    params = {'A': A, 'B': B, 'D': D, 'adaptive_func1': adaptive_func1, 'theta1': theta1}
+    
     return ct.NonlinearIOSystem(
-        update, output, inputs=['u'], outputs=['y'], states=1
+        update, output, inputs=['u'], outputs=['y'], states=1, params=params
     )
 
 def get_adaptive_hpf_for_2lpf(tau1, tau2, adaptive_func1, adaptive_func2,

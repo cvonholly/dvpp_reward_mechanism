@@ -9,7 +9,7 @@ import itertools
 # from check_qualification import *
 from src.dvpp_helper import get_DVPP   # DVPP_2_devices, DVPP_3_devices, DVPP_4_devices, plot_DVPP_2_devices
 from src.get_single_cl import get_single_cl
-from src.get_controllers import get_pi_controller
+from src.get_controllers import get_pi_controller, get_pi_controller_adaptive
 from src.get_device_systems import get_time_constants
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
@@ -31,7 +31,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               T_MAX=60,
                               save_path='pics/FFR',
                               service_diff = 0.1, # fraction of minimum service to supply. at 1 MW -> 0.1 * 1 MW = 0.1 MW
-                              STATIC_PF = False,   # use static instead of dynamic
+                              pf_name = False,   # use static instead of dynamic
                               
                               save_plots = True,
                               save_pics = True,
@@ -71,7 +71,13 @@ def simulate_devices_and_limits(IO_dict: dict,
     # get PI controller with physical saturation
     for name, specs in IO_dict.items():
         pi_params[name]['saturation_limits'] = (-specs[2], specs[2])  # -rating, +rating
-    PIs = {name: get_pi_controller(params=pi_params[name]) for name in my_names}  
+    PIs = {}
+    for name in my_names:
+        if name in adaptive_func:
+            pi_params[name]['adaptive_func'] = adaptive_func[name]
+            PIs[name] = get_pi_controller_adaptive(params=pi_params[name])
+        else:
+            PIs[name] = get_pi_controller(params=pi_params[name])
 
     # same delay as for dpf's
     small_delay = ct.tf([1], [get_time_constants()['tau_c'], 1], inputs='yref', outputs='yref_delay')
@@ -89,10 +95,6 @@ def simulate_devices_and_limits(IO_dict: dict,
     ## SET PARAMS FOR DVPP
     # example: Solar PV LPF, Wind LPF and Battery HPF
       # scales of the reference/hard constraints to test
-    pf_name = 'SPF' if STATIC_PF else 'DPF'
-    pf_name = 'ADPF' if (adaptive_func!={} and STATIC_PF!='DPF' and STATIC_PF) else pf_name
-    if x_scenario > 1:
-        pf_name += f' Scenario {x_scenario}'
     my_names = my_names       # specify otherwise if needed
     tau_c = get_time_constants()['tau_c']             # 0.081 in Verena paper
 
@@ -130,6 +132,9 @@ def simulate_devices_and_limits(IO_dict: dict,
                 sum_service_rating = set_service_rating[service]
             else:
                 sum_service_rating = sum([v[2] for v in subset_io_dict.values()])   # sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else 
+            sub_title = f'{title} {"+".join(subset)} {pf_name}'
+            if x_scenario > 1:
+                sub_title += f' scenario {x_scenario}'
             reward, energy_dict, get_peak_power = get_DVPP(
                             IO_dict=subset_io_dict,
                             pi_params=pi_params, dpfs=dpfs, 
@@ -141,8 +146,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                             save_plots=save_plots,
                             save_path=save_path,
                             tau_c=tau_c,
-                            title=f'{title} {"+".join(subset)} {pf_name}',
-                            STATIC_PF=STATIC_PF,
+                            title=sub_title,
+                            pf_name=pf_name,
                             price=price,
                             save_pics=save_pics,
                             adaptive_func=adaptive_func,
