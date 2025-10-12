@@ -47,9 +47,9 @@ def run_dvpp_simulation(create_io_dict,
                         save_pics=True,
                         adaptive_func={},  # adaptive dynamic participation factor function
                         change_roles_for_services={},
-                        set_service_rating={},
                         calc_1st_stage_reward=False,
-                        include_battery_uncertainty=False
+                        include_battery_uncertainty=False,
+                        save_dvpp_info=False
                         ):
     """
     create_io_dict: dict of devices with entries:
@@ -67,6 +67,13 @@ def run_dvpp_simulation(create_io_dict,
         where the functions ideally add up to 1 at each time step
     calc_1st_stage_reward:
         if True, calculate the 1st stage reward based on forecasted generation
+    change_roles_for_services:
+        dict of dicts with entries:
+            {(service_name): {(device_name): new_device_type}}
+    include_battery_uncertainty:
+        if True, include uncertainty in battery SoC
+    save_dvpp_info:
+        if True, save info about the DVPP (devices, ratings, controllers, ...) to csv
     ------------
     """
     # time series of 15-minute dc gain
@@ -101,6 +108,8 @@ def run_dvpp_simulation(create_io_dict,
         # select Sx scenarios based on probabilities
         selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
         time_stamps = wind_solar_dc_gains.index[selected_indices]  # selected time stamps
+        # remove tz localization for saving to csv
+        time_stamps = [ts.tz_localize(None) for ts in time_stamps]
         # save selected scenarios to csv
         df_scenarios = pd.DataFrame(selected_indices, columns=['selected_indices'])
         # add prices
@@ -113,20 +122,79 @@ def run_dvpp_simulation(create_io_dict,
         price = prices[prices>0].mean()
         prices = pd.DataFrame([price], columns=prices.columns, index=[0])
         selected_indices = [0]
+        time_stamps = [0]
 
     if include_battery_uncertainty:
         df_bat = pd.read_csv('data/battery_soc_profile.csv', sep=';', index_col=0)
-
     
+    # save dvpp info
+    dvpps_info = {s: pd.DataFrame(pd.NA, index=selected_indices, 
+                              columns=['time_stamps', 'forecasted_dc_gain', 'real_dc_gain', 'FFR_price', 'FCR-D up_price',
+                                       'forecasted_reward', 'real_reward', 'bess_soc']) for s in services_input.keys()}
+    if save_dvpp_info:
+        for s in dvpps_info.keys():
+            dvpps_info[s]['FFR_price'] = prices.iloc[selected_indices, 0].values
+            dvpps_info[s]['FCR-D up_price'] = prices.iloc[selected_indices, 1].values
+
     for service, (ts, input, requirement_curve) in services_input.items():
         #
         # todo: in future use different probabilities for different services, however now for comaprison reasons, use same
         #
-        # if Sx > 1:
-        #     ps = probs_15_min.iloc[:, 0].values if service=='FFR' else probs_15_min.iloc[:, 1].values
-        #     selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
         for i, idx in enumerate(selected_indices):
             print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, index {idx} \n')
+
+            # preliminary calculations
+            price = prices.iloc[idx, 0] if service=='FFR' else prices.iloc[idx, 1]
+            my_path = save_path + '/' + service.replace('-', '_')
+            save_pics_i = save_pics(i) if callable(save_pics) else save_pics
+
+            if calc_1st_stage_reward:
+                # get forecasted values
+                IO_dict = create_io_dict()    # reset io dict for each service
+                if change_roles_for_services:
+                    for name, new_type in change_roles_for_services.get(service, {}).items():
+                        IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
+                day = time_stamps[i]
+                hour = day.hour
+                forecast_PV, forecast_Wind = get_pv_wind_probs(day, df_path='data/data_wind_solar_2024_25.csv')
+                forecast_PV, forecast_Wind = forecast_PV[hour], forecast_Wind[hour]
+                dc_gain_Wind = forecast_Wind * power_ratings_dict['Wind']
+                dc_gain_PV = forecast_PV * power_ratings_dict['PV']
+                # adjust current io_dict
+                IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
+                IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
+                if include_battery_uncertainty:
+                    # get battery SoC for time
+                    idx_bat = datetime_to_idx(time_stamps[i])
+                    soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
+                    IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
+
+                # service response - forecast
+                VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
+                                            IO_dict=IO_dict,
+                                            pi_params=pi_params,
+                                            input_service_max=input,
+                                            curve_service_min=requirement_curve,
+                                            title=f'FORECAST {service}',
+                                            service_diff=service_diff,
+                                            T_MAX=ts[-1],
+                                            save_path=my_path,
+                                            pf_name=pf_name,
+                                            x_scenario=i+1,
+                                            price=price,  # specify scenario if needed from 1...Sx,
+                                            dpfs=dpfs,
+                                            save_pics=save_pics_i,
+                                            adaptive_func=adaptive_func,
+                                            service=service
+                )
+                forecasted_values[(service, i)] = VALUE
+                if save_dvpp_info:
+                    idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
+                    dvpps_info[service].loc[idx, ['time_stamps', 'forecasted_dc_gain', 'forecasted_reward', 'bess_soc']] = \
+                          [time_stamps[i], sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc]
+
+
+            # 2. stage: real-time operation
             IO_dict = create_io_dict()    # reset io dict for each service
             if change_roles_for_services:
                 for name, new_type in change_roles_for_services.get(service, {}).items():
@@ -143,16 +211,13 @@ def run_dvpp_simulation(create_io_dict,
                 soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
                 IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
 
-            price = prices.iloc[idx, 0] if service=='FFR' else prices.iloc[idx, 1]
-            my_path = save_path + '/' + service.replace('-', '_')
-
-            if Sx > 1:
-                # set save_pics_i to function, otherwise false
-                save_pics_i = save_pics(i)
+            if calc_1st_stage_reward:
+                # now we have a 1st stage expected reward, thus the rating in real time is set
+                set_service_rating = {k: v / price for k, v in VALUE.items()}
             else:
-                save_pics_i = save_pics
+                set_service_rating = None
 
-            # service response
+            # service response - real
             VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
                                         IO_dict=IO_dict,
                                         pi_params=pi_params,
@@ -175,45 +240,10 @@ def run_dvpp_simulation(create_io_dict,
                 all_values[service] = VALUE
             else:
                 all_values[(service, i)] = VALUE
-
-            if calc_1st_stage_reward:
-                # get forecasted values
-                IO_dict = create_io_dict()    # reset io dict for each service
-                day = time_stamps[i].tz_localize(None)
-                hour = day.hour
-                forecast_PV, forecast_Wind = get_pv_wind_probs(day, df_path='data/data_wind_solar_2024_25.csv')
-                forecast_PV, forecast_Wind = forecast_PV[hour], forecast_Wind[hour]
-                dc_gain_Wind = forecast_Wind * power_ratings_dict['Wind']
-                dc_gain_PV = forecast_PV * power_ratings_dict['PV']
-                # adjust current io_dict
-                IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
-                IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
-                if include_battery_uncertainty:
-                    # get battery SoC for time
-                    idx_bat = datetime_to_idx(time_stamps[i])
-                    soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
-                    IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
-
-                # service response
-                VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
-                                            IO_dict=IO_dict,
-                                            pi_params=pi_params,
-                                            input_service_max=input,
-                                            curve_service_min=requirement_curve,
-                                            title=f'FORECAST {service}',
-                                            service_diff=service_diff,
-                                            T_MAX=ts[-1],
-                                            save_path=my_path,
-                                            pf_name=pf_name,
-                                            x_scenario=i+1,
-                                            price=price,  # specify scenario if needed from 1...Sx,
-                                            dpfs=dpfs,
-                                            save_pics=save_pics_i,
-                                            adaptive_func=adaptive_func,
-                                            service=service,
-                                            set_service_rating=set_service_rating
-                )
-                forecasted_values[(service, i)] = VALUE
+            if save_dvpp_info:
+                idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
+                dvpps_info[service].loc[idx, ['real_dc_gain', 'real_reward']] = \
+                        [sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition]]
 
     # save values and shapely values
     df = pd.DataFrame.from_dict(all_values, orient='index')
@@ -222,3 +252,7 @@ def run_dvpp_simulation(create_io_dict,
     if calc_1st_stage_reward:
         df_forecast = pd.DataFrame.from_dict(forecasted_values, orient='index')
         df_forecast.to_csv(f'{save_path}/values_forecasted_{pf_name}.csv', float_format='%.5f')
+    
+    if save_dvpp_info:
+        for s, infos in dvpps_info.items():
+            infos.to_csv(f'{save_path}/dvpp_info_{pf_name}_{s}.csv', index=False)

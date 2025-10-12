@@ -56,6 +56,9 @@ def simulate_devices_and_limits(IO_dict: dict,
     T_MAX: time horizon of the service in seconds
     save_path: for the plots
     price: price of the service in EUR/MW
+    set_service_rating:
+        None: sum of ratings of devices in IO_dict
+        dict with entries {(name1, name2, ...): rating} to set the service rating for each coalition
 
     OUTPUT:
         plots of the responses
@@ -129,9 +132,9 @@ def simulate_devices_and_limits(IO_dict: dict,
             # set service rating
             # sum of ratings of LPF devices only, except for FFR where all devices can have enough energy to contribute
             if set_service_rating:
-                sum_service_rating = set_service_rating[service]
+                sum_service_rating = set_service_rating[subset]
             else:
-                sum_service_rating = sum([v[2] for v in subset_io_dict.values()])   # sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else 
+                sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
             sub_title = f'{title} {"+".join(subset)} {pf_name}'
             if x_scenario > 1:
                 sub_title += f' scenario {x_scenario}'
