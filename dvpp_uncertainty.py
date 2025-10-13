@@ -39,9 +39,9 @@ if __name__ == '__main__':
                         save_path='pics/vu2',
                         STATIC_PF=False,
                         make_PV_Wind_stochastic=True,
-                        Sx=20,
+                        Sx=10,
                         save_pics=save_pics,
                         calc_1st_stage_reward=True,
-                        include_battery_uncertainty=True,
-                        save_dvpp_info=True
+                        include_battery_uncertainty=False,
+                        save_dvpp_info=True,
                         )

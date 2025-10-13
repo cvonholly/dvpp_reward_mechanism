@@ -30,9 +30,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               title: str='',
                               T_MAX=60,
                               save_path='pics/FFR',
-                              service_diff = 0.1, # fraction of minimum service to supply. at 1 MW -> 0.1 * 1 MW = 0.1 MW
                               pf_name = False,   # use static instead of dynamic
-                              
                               save_plots = True,
                               save_pics = True,
                               x_scenario = 0,  # specify scenario if needed from 1...Sx
@@ -40,6 +38,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               adaptive_func={},
                               service='FCR',
                               set_service_rating=None,
+                              rating_threshold=0.02
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -52,13 +51,17 @@ def simulate_devices_and_limits(IO_dict: dict,
 
     input_service_max: maximum service curve a.k.a. reference
     curve_service_min: minimum service curve a.k.a. hard constraint to be upheld
-    scales_hard_constrains: values for scaling hard constraints
+    scales_rating: values for scaling hard constraints
     T_MAX: time horizon of the service in seconds
     save_path: for the plots
     price: price of the service in EUR/MW
     set_service_rating:
         None: sum of ratings of devices in IO_dict
         dict with entries {(name1, name2, ...): rating} to set the service rating for each coalition
+    rating_threshold:
+        minimum rating in MW for a coalition to be considered
+        if the sum of ratings of the devices in the coalition is below this threshold, the coalition is skipped
+        and 0 value is assigned
 
     OUTPUT:
         plots of the responses
@@ -68,7 +71,7 @@ def simulate_devices_and_limits(IO_dict: dict,
         SHAPELY_VALS: dict with shapely values for each player
     """
     # scales of the reference/hard constraints to test: from service_diff to 1 in 50 steps
-    scales_hard_constrains = np.linspace(service_diff, 1, 50)
+    scales_rating = np.linspace(0.1, 1, 50)
 
     my_names = list(IO_dict.keys())
     # get PI controller with physical saturation
@@ -110,11 +113,15 @@ def simulate_devices_and_limits(IO_dict: dict,
     for name in my_names:
         # check if fulfills requirements
         g_cl = Closed_Loop_systems[name]
+        sub_title = f'{title} {name} {pf_name}'
+        if x_scenario > 1:
+            sub_title += f' scenario {x_scenario}'
         reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
-                            name, tlim=[0, T_MAX],title=f'{title} {name} {pf_name}',
+                            name, tlim=[0, T_MAX],
+                            title=sub_title,
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
-                            scales_hard_constrains=scales_hard_constrains,
+                            scales_rating=scales_rating,
                             print_total_energy=True,
                             get_peak_power=True,
                             save_plots=save_plots,
@@ -129,33 +136,36 @@ def simulate_devices_and_limits(IO_dict: dict,
         for subset in itertools.combinations(my_names, i):
             print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
-            # set service rating
-            # sum of ratings of LPF devices only, except for FFR where all devices can have enough energy to contribute
-            if set_service_rating:
-                sum_service_rating = set_service_rating[subset]
-            else:
-                sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
+            # set dc gain and service rating
+            total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
+            sum_service_rating = set_service_rating[subset] if set_service_rating else total_dc_gain
+            
             sub_title = f'{title} {"+".join(subset)} {pf_name}'
             if x_scenario > 1:
                 sub_title += f' scenario {x_scenario}'
-            reward, energy_dict, get_peak_power = get_DVPP(
-                            IO_dict=subset_io_dict,
-                            pi_params=pi_params, dpfs=dpfs, 
-                            vref=input_service_max, min_hard_constrains=curve_service_min,
-                            scales_hard_constrains=scales_hard_constrains,
-                            tlim=[0, T_MAX],
-                            print_total_energy=False,
-                            get_peak_power=False,
-                            save_plots=save_plots,
-                            save_path=save_path,
-                            tau_c=tau_c,
-                            title=sub_title,
-                            pf_name=pf_name,
-                            price=price,
-                            save_pics=save_pics,
-                            adaptive_func=adaptive_func,
-                            sum_service_rating=sum_service_rating
-                            )
+            if sum_service_rating < rating_threshold:
+                print(f'Skipping {subset} due to low rating {sum_service_rating} MW < {rating_threshold} MW')
+                reward, energy_dict, get_peak_power = 0, {}, 0
+            else:
+                reward, energy_dict, get_peak_power = get_DVPP(
+                                IO_dict=subset_io_dict,
+                                pi_params=pi_params, dpfs=dpfs, 
+                                vref=input_service_max, min_hard_constrains=curve_service_min,
+                                scales_rating=scales_rating,
+                                tlim=[0, T_MAX],
+                                print_total_energy=False,
+                                get_peak_power=False,
+                                save_plots=save_plots,
+                                save_path=save_path,
+                                tau_c=tau_c,
+                                title=sub_title,
+                                pf_name=pf_name,
+                                price=price,
+                                save_pics=save_pics,
+                                adaptive_func=adaptive_func,
+                                sum_service_rating=sum_service_rating,
+                                total_dc_gain=total_dc_gain
+                                )
 
             VALUE[subset] = reward
             ENERGY[subset] = energy_dict    

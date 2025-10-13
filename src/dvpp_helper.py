@@ -12,7 +12,7 @@ def get_DVPP(IO_dict,
             dpfs,
             vref, min_hard_constrains,
             title='', tlim=(0, 60),
-            scales_hard_constrains=np.array([]),
+            scales_rating=np.array([]),
             tol=1e-3,
             save_path='pics/rewards',
             print_total_energy=False,
@@ -25,7 +25,8 @@ def get_DVPP(IO_dict,
             price=1,
             save_pics=True,
             adaptive_func={},
-            sum_service_rating=1.0):
+            sum_service_rating=1.0,
+            total_dc_gain=1.0):
     """
     IO_dict: dict of IO systems with entries: 
         {(name): (ct.tf(...), device_type, rating)} 
@@ -37,7 +38,7 @@ def get_DVPP(IO_dict,
 
     input_service_max: maximum service curve a.k.a. reference
     curve_service_min: minimum service curve a.k.a. hard constraint to be upheld
-    scales_hard_constrains: values for scaling hard constraints
+    scales_rating: values for scaling the reference
     T_MAX: time horizon of the service in seconds
     save_path: for the plots
     price: price of the service in EUR/MW
@@ -91,7 +92,7 @@ def get_DVPP(IO_dict,
     # Dynamic Participation Factors
     if pf_name=='DPF':
         for name, g in lpf_devices.items():
-            g = IO_dict[name][2] / sum_service_rating * dpfs[name]  # compute dynamic participation factor
+            g = IO_dict[name][2] / total_dc_gain * dpfs[name]  # compute dynamic participation factor
             mks[name] = g  # Define steady-state DPFs as LPFs
             Gs_sum += g
         for name, g in bpf_devices.items():
@@ -103,7 +104,7 @@ def get_DVPP(IO_dict,
     # Adaptive Dynamic Participation Factors
     elif pf_name=='ADPF':
         mks = get_ADPF(lpf_devices, bpf_devices, hpf_devices, 
-                       IO_dict, sum_service_rating, dpfs, adaptive_func, T_END=tlim[1], tau_c=tau_c)
+                       IO_dict, total_dc_gain, dpfs, adaptive_func, T_END=tlim[1], tau_c=tau_c)
     # elif STATIC_PF and adaptive_func!={}:
     #     mks = get_static_pf_varying_ref(IO_dict, adaptive_func)
     # todo add option for dynamic but not adaptive participation factors
@@ -127,8 +128,7 @@ def get_DVPP(IO_dict,
 
     t = np.linspace(tlim[0], tlim[1], n_points)
     x0 = [0, 0]
-    service_rating = max(sum_service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
-    vref = service_rating * vref   # scale by rating
+    vref = sum_service_rating * vref   # scale by rating
 
     for k, name, G in zip(range(n_devices), names, all_devices):
         print('Running for device:', name)
@@ -199,19 +199,23 @@ def get_DVPP(IO_dict,
     plant_output = np.sum([responses[n].outputs[0] for n in names], axis=0) if responses[names[0]].outputs.ndim > 1 else np.sum([responses[n].outputs for n in names], axis=0)
 
     # check if unit fulfills test
-    final_rating = service_rating * scales_hard_constrains[0]
+    final_rating = sum_service_rating * scales_rating[0]
     reward = -3 * price * final_rating  # penalty if not fulfilling requirements
     new_hard_constraints = final_rating * min_hard_constrains
-    for scale in scales_hard_constrains:
-        diff = tol + plant_output - scale * service_rating * min_hard_constrains
+    for scale in scales_rating:
+        diff = tol + plant_output - scale * sum_service_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
-            reward = service_rating * scale * price
-            final_rating = service_rating * scale
+            reward = sum_service_rating * scale * price
+            final_rating = sum_service_rating * scale
             new_hard_constraints = final_rating * min_hard_constrains
         else:
             # failed the test
             break
+
+    # check if minimum rating is reached
+    if final_rating < min_service_rating:
+        reward = -3 * price * final_rating  # penalty if not fulfilling requirements
 
     if not save_pics:  # do not plot
         return reward, {}, {}
@@ -236,7 +240,7 @@ def get_DVPP(IO_dict,
     # plot every device output and input
     for name in names:
         plt.subplot(2, 1, 1)
-        plt.plot(t, responses[name].outputs[0], linewidth=1.5, label=f'{name} at {IO_dict[name][2]:.1f}')
+        plt.plot(t, responses[name].outputs[0], linewidth=1.5, label=f'{name} at {IO_dict[name][2]:.2f}')
         # plot reference in same color but dimmer
         color = plt.gca().lines[-1].get_color()
         plt.plot(t, responses[name].outputs[1], '--', linewidth=1.5, label=f'{name} reference', color=color, alpha=0.5)

@@ -35,9 +35,9 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
     df_s = df_window['Solar']
     df_s = df_s.groupby([df_s.index.hour]).apply(list)
 
-    def get_alpha_beta_mean(data, thresh=0.03):
+    def get_alpha_beta_mean(data, thresh=0.05):
         if np.mean(data) < thresh:
-            return 0.0
+            return np.mean(data)
         a, b, loc, scale = beta.fit(data)
         mean = beta.mean(a, b, loc=loc, scale=scale)
         return mean

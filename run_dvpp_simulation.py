@@ -40,7 +40,6 @@ from src.get_pv_wind_probs import get_pv_wind_probs
 def run_dvpp_simulation(create_io_dict,
                         save_path='pics/new',
                         services_input={'FCR': get_fcr(), 'FFR': get_ffr(), 'FFR-FCR': get_ffr_fcr(), 'FCR-D': get_fcr_d()},
-                        service_diff = 0.1,  # minimum fraction of capacity that can be provided as service (1MW)
                         Sx=1,   # number of scenarios to average over
                         make_PV_Wind_stochastic=False,   # take dc gain from probability distribution
                         STATIC_PF=False,
@@ -168,6 +167,8 @@ def run_dvpp_simulation(create_io_dict,
                     idx_bat = datetime_to_idx(time_stamps[i])
                     soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
                     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
+                else:
+                    soc = 4   # todo: get from somewhere else
 
                 # service response - forecast
                 VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
@@ -176,7 +177,6 @@ def run_dvpp_simulation(create_io_dict,
                                             input_service_max=input,
                                             curve_service_min=requirement_curve,
                                             title=f'FORECAST {service}',
-                                            service_diff=service_diff,
                                             T_MAX=ts[-1],
                                             save_path=my_path,
                                             pf_name=pf_name,
@@ -224,7 +224,6 @@ def run_dvpp_simulation(create_io_dict,
                                         input_service_max=input,
                                         curve_service_min=requirement_curve,
                                         title=f'{service}',
-                                        service_diff=service_diff,
                                         T_MAX=ts[-1],
                                         save_path=my_path,
                                         pf_name=pf_name,
