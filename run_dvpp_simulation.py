@@ -48,7 +48,9 @@ def run_dvpp_simulation(create_io_dict,
                         change_roles_for_services={},
                         calc_1st_stage_reward=False,
                         include_battery_uncertainty=False,
-                        save_dvpp_info=False
+                        save_dvpp_info=False,
+                        run_one_week_simulation=False,
+                        hourly_average=True
                         ):
     """
     create_io_dict: dict of devices with entries:
@@ -76,7 +78,7 @@ def run_dvpp_simulation(create_io_dict,
     ------------
     """
     # time series of 15-minute dc gain
-    wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains()  
+    wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains(hourly_average=hourly_average)  
 
     # get all orders of coalitions
     all_values = {}
@@ -106,44 +108,42 @@ def run_dvpp_simulation(create_io_dict,
         ps = probs_15_min.iloc[:, 0].values # select FFR probabilities for now
         # select Sx scenarios based on probabilities
         selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
-        time_stamps = wind_solar_dc_gains.index[selected_indices]  # selected time stamps
-        # remove tz localization for saving to csv
-        time_stamps = [ts.tz_localize(None) for ts in time_stamps]
-        # save selected scenarios to csv
-        df_scenarios = pd.DataFrame(selected_indices, columns=['selected_indices'])
-        # add prices
-        df_scenarios['FFR price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 0])
-        df_scenarios['FCR-D up price EUR/MW/h'] = df_scenarios['selected_indices'].apply(lambda idx: prices.iloc[idx, 1])
-        # save
-        df_scenarios.to_csv(f'{save_path}/selected_scenarios.csv', index=False)
-    if Sx == 1:
+        # convert indices to time stamps
+        time_stamps = wind_solar_dc_gains.index[selected_indices]
+    elif run_one_week_simulation:
+        # picks date and runs for one week
+        start_date = run_one_week_simulation[0]
+        end_date = run_one_week_simulation[1]
+        mask = (wind_solar_dc_gains.index >= start_date) & (wind_solar_dc_gains.index < end_date)
+        time_stamps = wind_solar_dc_gains[mask].index
+    elif not run_one_week_simulation and Sx==1:
         # set price to average non-zero price
         price = prices[prices>0].mean()
         prices = pd.DataFrame([price], columns=prices.columns, index=[0])
-        selected_indices = [0]
         time_stamps = [0]
 
     if include_battery_uncertainty:
         df_bat = pd.read_csv('data/battery_soc_profile.csv', sep=';', index_col=0)
     
     # save dvpp info
-    dvpps_info = {s: pd.DataFrame(pd.NA, index=selected_indices, 
+    print(time_stamps)
+    dvpps_info = {s: pd.DataFrame(pd.NA, index=time_stamps,
                               columns=['time_stamps', 'forecasted_dc_gain', 'real_dc_gain', 'FFR_price', 'FCR-D up_price',
                                        'forecasted_reward', 'real_reward', 'bess_soc']) for s in services_input.keys()}
     if save_dvpp_info:
         for s in dvpps_info.keys():
-            dvpps_info[s]['FFR_price'] = prices.iloc[selected_indices, 0].values
-            dvpps_info[s]['FCR-D up_price'] = prices.iloc[selected_indices, 1].values
+            dvpps_info[s]['FFR_price'] = prices.loc[time_stamps, 'FFR_price'].values
+            dvpps_info[s]['FCR-D up_price'] = prices.loc[time_stamps, 'FCR_D_up_price'].values
 
     for service, (ts, input, requirement_curve) in services_input.items():
         #
         # todo: in future use different probabilities for different services, however now for comaprison reasons, use same
         #
-        for i, idx in enumerate(selected_indices):
-            print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, index {idx} \n')
+        for i, idx in enumerate(time_stamps):
+            print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, time {idx} \n')
 
             # preliminary calculations
-            price = prices.iloc[idx, 0] if service=='FFR' else prices.iloc[idx, 1]
+            price = prices.loc[idx, 'FFR_price'] if service=='FFR' else prices.loc[idx, 'FCR_D_up_price']
             my_path = save_path + '/' + service.replace('-', '_')
             save_pics_i = save_pics(i) if callable(save_pics) else save_pics
 
@@ -153,7 +153,7 @@ def run_dvpp_simulation(create_io_dict,
                 if change_roles_for_services:
                     for name, new_type in change_roles_for_services.get(service, {}).items():
                         IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
-                day = time_stamps[i]
+                day = idx
                 hour = day.hour
                 forecast_PV, forecast_Wind = get_pv_wind_probs(day, df_path='data/data_wind_solar_2024_25.csv')
                 forecast_PV, forecast_Wind = forecast_PV[hour], forecast_Wind[hour]
@@ -200,8 +200,8 @@ def run_dvpp_simulation(create_io_dict,
                 for name, new_type in change_roles_for_services.get(service, {}).items():
                     IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
             if make_PV_Wind_stochastic:   # adjust dc gain
-                dc_gain_Wind = wind_solar_dc_gains['Wind'].iloc[idx] * power_ratings_dict['Wind']
-                dc_gain_PV = wind_solar_dc_gains['Solar'].iloc[idx] * power_ratings_dict['PV']
+                dc_gain_Wind = wind_solar_dc_gains['Wind'].loc[idx] * power_ratings_dict['Wind']
+                dc_gain_PV = wind_solar_dc_gains['Solar'].loc[idx] * power_ratings_dict['PV']
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
@@ -216,6 +216,9 @@ def run_dvpp_simulation(create_io_dict,
                 set_service_rating = {k: v / price for k, v in VALUE.items()}
             else:
                 set_service_rating = None
+            
+            # if we have 2. stage, we have to follow the bid we have made
+            min_service_rating = 0.1 if not calc_1st_stage_reward else 0.9 * max(set_service_rating.values())
 
             # service response - real
             VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
@@ -233,7 +236,8 @@ def run_dvpp_simulation(create_io_dict,
                                         save_pics=save_pics_i,
                                         adaptive_func=adaptive_func,
                                         service=service,
-                                        set_service_rating=set_service_rating
+                                        set_service_rating=set_service_rating,
+                                        min_service_rating=min_service_rating
             )
             if Sx == 1:
                 all_values[service] = VALUE

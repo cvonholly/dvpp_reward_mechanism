@@ -8,9 +8,11 @@ import numpy as np
 import pandas as pd
 
 def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
-                            path='data/data_wind_solar_2024_25.csv'):
+                            path='data/data_wind_solar_2024_25.csv',
+                            hourly_average=True):
     """
     gets production data for entire year
+    - hourly_average: if True, averages the data to hourly values
 
     returns:
     - production per 15-minute as DC gain, meaned by max value
@@ -26,20 +28,31 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
     # normalize by max values
     max_vals = df.max()
     df_mean = df / max_vals
+    # remove time zone info
+    time_stamps = [ts.tz_localize(None) for ts in df_mean.index]
+    df_mean.index = time_stamps
+    if hourly_average:
+        df_mean = df_mean.resample('h').mean()
 
     final_dfs = []
     if get_probability_and_prices_distribution:
         paths = ['data/data_ffr_fcr_procurement_2024_25.csv', 'data/data_ffr_fcr_d_price_2024_25.csv']
         for k, path in enumerate(paths):
+            # this data is already in hourly format
             df = pd.read_csv(path, sep=';')
             df.drop('endTime', inplace=True, axis=1)
-            df.rename(columns={'startTime': 'Datum'}, inplace=True)
+            df.rename(columns={'startTime': 'Datum',
+                               'Fast Frequency Reserve FFR, price': 'FFR_price',
+                               'Frequency Containment Reserve for Disturbances upwards regulation, hourly market prices': 'FCR_D_up_price'}, 
+                               inplace=True)
             df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
             df.set_index('Datum', inplace=True)
             if k==0: df = df / df.sum()
             # next, split up every row into 4 values for 15 min intervals
-            df = pd.DataFrame(np.repeat(df.values, 4, axis=0), columns=df.columns)
-            df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
+            if not hourly_average:
+                df = pd.DataFrame(np.repeat(df.values, 4, axis=0), columns=df.columns)
+            df.index = [ts.tz_localize(None) for ts in df.index]
+            #  df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
             if k==0: df = df / df.sum()
             final_dfs.append(df)
         # ensure they have same size
@@ -48,6 +61,9 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
         df_mean = df_mean.iloc[:minlen]
         for df in final_dfs:
             df = df.iloc[:minlen]
+            if not hourly_average:
+                df.index = df_mean.index
+                
         return df_mean, final_dfs[0], final_dfs[1]
 
     return df_mean

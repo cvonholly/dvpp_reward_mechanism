@@ -216,6 +216,13 @@ def get_DVPP(IO_dict,
     # check if minimum rating is reached
     if final_rating < min_service_rating:
         reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+    
+    # in this case, we have a minimum rating to fulfill
+    if min_service_rating > 0.1:
+        if final_rating < min_service_rating:
+            reward = -3 * price * min_service_rating  # penalty if not fulfilling requirements
+        else:
+            reward = final_rating * price
 
     if not save_pics:  # do not plot
         return reward, {}, {}

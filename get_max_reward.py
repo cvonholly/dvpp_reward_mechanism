@@ -38,7 +38,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               adaptive_func={},
                               service='FCR',
                               set_service_rating=None,
-                              rating_threshold=0.02
+                              rating_threshold=0.02,
+                              min_service_rating=0.1
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -127,7 +128,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                             save_plots=save_plots,
                             price=price,
                             save_pics=save_pics,
-                            adaptive_func=adaptive_func)
+                            adaptive_func=adaptive_func,
+                            min_service_rating=min_service_rating)
         VALUE[(name,)] = reward
         ENERGY[(name,)] = energy_dict
         PEAK_POWER[(name,)] = get_peak_power
@@ -164,7 +166,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                                 save_pics=save_pics,
                                 adaptive_func=adaptive_func,
                                 sum_service_rating=sum_service_rating,
-                                total_dc_gain=total_dc_gain
+                                total_dc_gain=total_dc_gain,
+                                min_service_rating=min_service_rating
                                 )
 
             VALUE[subset] = reward

@@ -18,10 +18,13 @@ assumptions:
             sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
 """
 
+import pandas as pd
+
 # import procduction data
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
-from run_dvpp_simulation import run_dvpp_simulation
+# from run_dvpp_simulation import run_dvpp_simulation
+from run_dvpp_sim_paralell import run_dvpp_simulation
 
 
 if __name__ == '__main__':
@@ -34,14 +37,17 @@ if __name__ == '__main__':
 
     def save_pics(i):
         return i < 2  # save pics for first 2 scenarios only
-                
+
+    start_date, end_date = pd.to_datetime(['2025-04-06', '2025-04-13'])
+
     run_dvpp_simulation(get_io_dict,
-                        save_path='pics/vu_min',
+                        save_path='pics/vuw',
                         STATIC_PF=False,
                         make_PV_Wind_stochastic=True,
-                        Sx=10,
                         save_pics=save_pics,
                         calc_1st_stage_reward=True,
                         include_battery_uncertainty=False,
                         save_dvpp_info=True,
+                        run_one_week_simulation=(start_date, end_date),
+                        hourly_average=True
                         )
