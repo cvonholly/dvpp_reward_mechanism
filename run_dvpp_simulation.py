@@ -218,7 +218,7 @@ def run_dvpp_simulation(create_io_dict,
                 set_service_rating = None
             
             # if we have 2. stage, we have to follow the bid we have made
-            min_service_rating = 0.1 if not calc_1st_stage_reward else 0.9 * max(set_service_rating.values())
+            min_service_rating = 0.1 if not calc_1st_stage_reward else 0.8 * max(set_service_rating.values())
 
             # service response - real
             VALUE, ENERGY, PEAK_POWER = simulate_devices_and_limits(
