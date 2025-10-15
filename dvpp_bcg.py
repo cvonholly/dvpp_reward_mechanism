@@ -23,8 +23,7 @@ import pandas as pd
 # import procduction data
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
-# from run_dvpp_simulation import run_dvpp_simulation
-from run_dvpp_sim_paralell import run_dvpp_simulation
+from run_dvpp_simulation import run_dvpp_simulation
 
 
 if __name__ == '__main__':
