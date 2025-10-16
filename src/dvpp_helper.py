@@ -84,7 +84,7 @@ def get_DVPP(IO_dict,
         del bpf_devices[bpf_name]
 
     # print devices and type
-    print(f'LPF devices: {lpf_devices.keys()}, BPF devices: {bpf_devices.keys()}, HPF devices: {hpf_devices.keys()}')
+    # print(f'LPF devices: {lpf_devices.keys()}, BPF devices: {bpf_devices.keys()}, HPF devices: {hpf_devices.keys()}')
 
     # set devices and rating
     n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
@@ -131,7 +131,7 @@ def get_DVPP(IO_dict,
     vref = sum_service_rating * vref   # scale by rating
 
     for k, name, G in zip(range(n_devices), names, all_devices):
-        print('Running for device:', name)
+        # print('Running for device:', name)
         # each plant has their own desired transfer function, namely mks[name] from y -> y_i
         T_des = mks[name]
         T_des.name = f'T_des_{name}'
@@ -265,7 +265,7 @@ def get_DVPP(IO_dict,
             print(f'Peak Power for {name}: {peak_power:.2f}')
             peak_powerd_dict[name] = round(float(peak_power), 2)
 
-    print('========================================')
+            print('========================================')
 
     plt.subplot(2, 1, 1)
     plt.legend(loc='upper right')

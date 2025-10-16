@@ -23,7 +23,7 @@ import pandas as pd
 # import procduction data
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
-from run_dvpp_simulation import run_dvpp_simulation
+from run_bcd_dvpp_sim import run_bcd_dvpp_sim
 
 
 if __name__ == '__main__':
@@ -34,19 +34,14 @@ if __name__ == '__main__':
                 'BESS': (get_bess_energy_sys(e_max=4), 'hpf', 1),
                 }
 
-    def save_pics(i):
-        return i < 2  # save pics for first 2 scenarios only
+    # start_date, end_date = pd.to_datetime(['2025-04-06', '2025-04-13'])
 
-    start_date, end_date = pd.to_datetime(['2025-04-06', '2025-04-13'])
-
-    run_dvpp_simulation(get_io_dict,
-                        save_path='pics/vuw',
+    run_bcd_dvpp_sim(get_io_dict,
+                        save_path='pics/v_bcg',
                         STATIC_PF=False,
-                        make_PV_Wind_stochastic=True,
-                        save_pics=save_pics,
-                        calc_1st_stage_reward=True,
+                        Sx=5,
+                        # time_slots=(start_date, end_date),
                         include_battery_uncertainty=False,
                         save_dvpp_info=True,
-                        run_one_week_simulation=(start_date, end_date),
-                        hourly_average=True
+                        hourly_average=False
                         )

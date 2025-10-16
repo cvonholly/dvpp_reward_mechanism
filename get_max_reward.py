@@ -38,7 +38,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                               adaptive_func={},
                               service='FCR',
                               set_service_rating=None,
-                              rating_threshold=0.02,
+                              rating_threshold=0.05,
                               min_service_rating=0.1
                             ):
     """
@@ -123,8 +123,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                             service_rating=IO_dict[name][2],
                             save_path=save_path,
                             scales_rating=scales_rating,
-                            print_total_energy=True,
-                            get_peak_power=True,
+                            print_total_energy=False,
+                            get_peak_power=False,
                             save_plots=save_plots,
                             price=price,
                             save_pics=save_pics,
@@ -147,6 +147,9 @@ def simulate_devices_and_limits(IO_dict: dict,
                 sub_title += f' scenario {x_scenario}'
             if sum_service_rating < rating_threshold:
                 print(f'Skipping {subset} due to low rating {sum_service_rating} MW < {rating_threshold} MW')
+                reward, energy_dict, get_peak_power = 0, {}, 0
+            elif total_dc_gain < min_service_rating:
+                print(f'Skipping {subset} due to low total dc gain {total_dc_gain} MW < {min_service_rating} MW')
                 reward, energy_dict, get_peak_power = 0, {}, 0
             else:
                 reward, energy_dict, get_peak_power = get_DVPP(

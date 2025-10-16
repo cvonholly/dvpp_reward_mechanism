@@ -9,7 +9,7 @@ import pandas as pd
 
 def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
                             path='data/data_wind_solar_2024_25.csv',
-                            hourly_average=True):
+                            hourly_average=False):
     """
     gets production data for entire year
     - hourly_average: if True, averages the data to hourly values
@@ -34,7 +34,7 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
     if hourly_average:
         df_mean = df_mean.resample('h').mean()
 
-    final_dfs = []
+    final_dfs = {}
     if get_probability_and_prices_distribution:
         paths = ['data/data_ffr_fcr_procurement_2024_25.csv', 'data/data_ffr_fcr_d_price_2024_25.csv']
         for k, path in enumerate(paths):
@@ -45,25 +45,26 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
                                'Fast Frequency Reserve FFR, price': 'FFR_price',
                                'Frequency Containment Reserve for Disturbances upwards regulation, hourly market prices': 'FCR_D_up_price'}, 
                                inplace=True)
-            df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
+            df['Datum'] = pd.to_datetime(df["Datum"], format='mixed')
             df.set_index('Datum', inplace=True)
             if k==0: df = df / df.sum()
             # next, split up every row into 4 values for 15 min intervals
             if not hourly_average:
                 df = pd.DataFrame(np.repeat(df.values, 4, axis=0), columns=df.columns)
-            df.index = [ts.tz_localize(None) for ts in df.index]
-            #  df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
+            else:
+                df.index = [ts.tz_localize(None) for ts in df.index]
             if k==0: df = df / df.sum()
-            final_dfs.append(df)
+            final_dfs[k] = df
         # ensure they have same size
-        minlen = min([len(d) for d in final_dfs])
+        minlen = min([len(d) for d in final_dfs.values()])
         minlen = min(minlen, len(df_mean))
         df_mean = df_mean.iloc[:minlen]
-        for df in final_dfs:
+        for k, df in final_dfs.items():
             df = df.iloc[:minlen]
             if not hourly_average:
                 df.index = df_mean.index
-                
+            final_dfs[k] = df   
+
         return df_mean, final_dfs[0], final_dfs[1]
 
     return df_mean
@@ -78,49 +79,3 @@ def datetime_to_idx(datetime_idx):
     quarter_of_hour = datetime_idx.minute // 15
     index = day_of_week * 24 * 4 + hour_of_day * 4 + quarter_of_hour
     return index
-
-
-def get_wind_solar_dc_gains_weekly(get_probability_and_prices_distribution=True):
-    """
-    means production data over a typical week
-
-    returns production per 15-minute (meaned over the week) as DC gain
-    """
-
-    import pandas as pd
-
-    df = pd.read_csv('data/data_wind_solar_2024_25.csv', sep=';')
-    df.drop('endTime', inplace=True, axis=1)
-    df.rename(columns={'startTime': 'Datum'}, inplace=True)
-    df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
-    df.set_index('Datum', inplace=True)
-    df.columns = ['Wind', 'Solar']
-    # get mean and std value
-    df_mean = df.groupby([df.index.dayofweek, df.index.hour, df.index.minute]).mean()
-    df_std = df.groupby([df.index.dayofweek, df.index.hour, df.index.minute]).std()
-    # normalize by max values
-    max_vals = df.max()
-    df_mean = df_mean / max_vals
-    df_std = df_std / max_vals
-
-    final_dfs = []
-    if get_probability_and_prices_distribution:
-        paths = ['data/data_ffr_fcr_procurement_2024_25.csv', 'data/data_ffr_fcr_d_price_2024_25.csv']
-        for k, path in enumerate(paths):
-            df = pd.read_csv(path, sep=';')
-            df.drop('endTime', inplace=True, axis=1)
-            df.rename(columns={'startTime': 'Datum'}, inplace=True)
-            df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
-            df.set_index('Datum', inplace=True)
-            df = df.groupby([df.index.dayofweek, df.index.hour, df.index.minute]).mean()
-            df.index = pd.MultiIndex.from_tuples(df.index, names=['Wochentag', 'Stunde', 'Minute'])
-            if k==0: df = df / df.sum()
-            # next, split up every row into 4 values for 15 min intervals
-            df = pd.DataFrame(np.repeat(df.values, 4, axis=0), columns=df.columns)
-            df.index = pd.RangeIndex(start=0, stop=len(df), step=1)
-            if k==0: df = df / df.sum()
-            final_dfs.append(df)
-
-        return df_mean, df_std, final_dfs[0], final_dfs[1]
-
-    return df_mean, df_std

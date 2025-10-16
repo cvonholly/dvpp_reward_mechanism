@@ -52,8 +52,8 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
 
 def get_errors(K, 
                hour, 
-               path_prod='../data/data_wind_solar_2024_25.csv',
-               path_forecast='../data/data_wind_solar_2024_25_forecast.csv'):
+               path_prod='data/data_wind_solar_2024_25.csv',
+               path_forecast='data/data_wind_solar_2024_25_forecast.csv'):
     """
     get K errors for PV and Wind generation for a some number of hours
     normalized by max production value
@@ -65,8 +65,8 @@ def get_errors(K,
         path_forecast: str, path to forecast data
     
     returns:
-        errors_wind: list of K errors for wind generation
-        errors_solar: list of K errors for solar generation
+        errors:
+            of legnth k, tuples with [(wind_err_1, solar_err_1), ...]
     """
     # get producition data
     df = pd.read_csv(path_prod, sep=';')
@@ -105,14 +105,56 @@ def get_errors(K,
     # draw K samples
     k_err_wind = np.random.choice(hourly_error_wind, size=K).tolist()
     k_err_solar = np.random.choice(hourly_error_solar, size=K).tolist()
+    
+    # combined
+    err_combined = [(k_err_wind[i], k_err_solar[i]) for i in range(K)]
 
-    return k_err_wind, k_err_solar
+    return err_combined
     
 
+def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
+                      path_forecast='data/data_wind_solar_2024_25_forecast.csv'):
+    """
+    get K errors for PV and Wind generation for a some number of hours
+    normalized by max production value
 
+    params:
+        K: int, number of errors to sample
+        hour: int, number of hours to sample from
+        path_prod: str, path to production data
+        path_forecast: str, path to forecast data
+    
+    returns:
+        errors_wind: list of K errors for wind generation
+        errors_solar: list of K errors for solar generation
+    """
+    # get producition data
+    df = pd.read_csv(path_prod, sep=';')
+    df.drop('endTime', inplace=True, axis=1)
+    df.rename(columns={'startTime': 'Datum'}, inplace=True)
+    df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
+    df["Datum"] = df['Datum'].dt.tz_localize(None)
+    df.set_index('Datum', inplace=True)
+    df.columns = ['Wind', 'Solar']
+    # normalize [0,1]
+    max_wind, max_solar = df['Wind'].max(), df['Solar'].max()
+    df['Wind'] = df['Wind'].clip(lower=0) / max_wind
+    df['Solar'] = df['Solar'].clip(lower=0) / max_solar
+    # get forecast data
+    df_forecast = pd.read_csv(path_forecast, sep=';')
+    df_forecast.drop('endTime', inplace=True, axis=1)
+    df_forecast.rename(columns={'startTime': 'Datum'}, inplace=True)
+    df_forecast["Datum"] = pd.to_datetime(df_forecast["Datum"], format='mixed')
+    df_forecast["Datum"] = df_forecast['Datum'].dt.tz_localize(None)
+    df_forecast.set_index('Datum', inplace=True)
+    df_forecast.columns = ['Wind_forecast', 'Solar_forecast']
+    # normalize [0,1]
+    df_forecast['Wind_forecast'] = df_forecast['Wind_forecast'].clip(lower=0) / max_wind
+    df_forecast['Solar_forecast'] = df_forecast['Solar_forecast'].clip(lower=0) / max_solar
 
+    time_stamps = [ts.tz_localize(None) for ts in df.index]
+    df.index = time_stamps
+    time_stamps = [ts.tz_localize(None) for ts in df_forecast.index]
+    df_forecast.index = time_stamps
 
-if __name__ == '__main__':
-    # Example usage
-    day = pd.Timestamp('2024-12-15')
-    hourly_pv_mean, hourly_wind_mean = get_pv_wind_probs(day)
+    return df, df_forecast
