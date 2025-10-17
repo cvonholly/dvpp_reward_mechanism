@@ -32,9 +32,19 @@ def get_banzhaf_value(v: dict, players: list, normalized=True) -> dict:
             banzhaf_values = {k: v * (reward / total_banzhaf) for k, v in banzhaf_values.items()}
     return banzhaf_values
 
-def powerset(iterable):
+def powerset_tuple(iterable,
+             exclude_empty=True) -> list:
     "Subsequences of the iterable from shortest to longest."
-    # powerset([1,2,3]) → () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    s = list(iterable)
+    x = chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
+    if not exclude_empty:
+        x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+    return [tuple(comb) for comb in x]
+
+def powerset(iterable,
+             exclude_empty=False) -> list:
+    "Subsequences of the iterable from shortest to longest."
+    # powerset([1,2,3]) → {}, {1}, {2}, {3}, {1,2}, {1,3}, {2,3}, {1,2,3}
     s = list(iterable)
     x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
     return [frozenset(comb) for comb in x]

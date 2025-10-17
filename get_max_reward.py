@@ -39,7 +39,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               service='FCR',
                               set_service_rating=None,
                               rating_threshold=0.05,
-                              min_service_rating=0.1
+                              min_service_rating=0.1,
+                              bid_received={}
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -63,6 +64,11 @@ def simulate_devices_and_limits(IO_dict: dict,
         minimum rating in MW for a coalition to be considered
         if the sum of ratings of the devices in the coalition is below this threshold, the coalition is skipped
         and 0 value is assigned
+    min_service_rating:
+        minimum service rating in MW for each device to be considered
+    bid_received:
+        dict with entries {(name1, name2, ...): bid} to set the received bid for each coalition
+        if empty: no bids are considered and maximum reward is calculated
 
     OUTPUT:
         plots of the responses
@@ -117,19 +123,24 @@ def simulate_devices_and_limits(IO_dict: dict,
         sub_title = f'{title} {name} {pf_name}'
         if x_scenario > 1:
             sub_title += f' scenario {x_scenario}'
-        reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
-                            name, tlim=[0, T_MAX],
-                            title=sub_title,
-                            service_rating=IO_dict[name][2],
-                            save_path=save_path,
-                            scales_rating=scales_rating,
-                            print_total_energy=False,
-                            get_peak_power=False,
-                            save_plots=save_plots,
-                            price=price,
-                            save_pics=save_pics,
-                            adaptive_func=adaptive_func,
-                            min_service_rating=min_service_rating)
+        min_rating_i = bid_received.get((name), 0.1) if bid_received!={} else min_service_rating
+        if min_rating_i < min_service_rating:
+            print(f'Skipping {name} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
+            reward, energy_dict, get_peak_power = 0, {}, 0
+        else:
+            reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
+                                name, tlim=[0, T_MAX],
+                                title=sub_title,
+                                service_rating=IO_dict[name][2],
+                                save_path=save_path,
+                                scales_rating=scales_rating,
+                                print_total_energy=False,
+                                get_peak_power=False,
+                                save_plots=save_plots,
+                                price=price,
+                                save_pics=save_pics,
+                                adaptive_func=adaptive_func,
+                                min_service_rating=min_rating_i)
         VALUE[(name,)] = reward
         ENERGY[(name,)] = energy_dict
         PEAK_POWER[(name,)] = get_peak_power
@@ -140,17 +151,25 @@ def simulate_devices_and_limits(IO_dict: dict,
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
             # set dc gain and service rating
             total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
+            # this is tha rating the dvpp can provide, accoring to the forecast
             sum_service_rating = set_service_rating[subset] if set_service_rating else total_dc_gain
-            
+            # this is the min rating due to a bid that was placed
+            min_rating_i = bid_received[subset] if bid_received!={} else min_service_rating 
+
             sub_title = f'{title} {"+".join(subset)} {pf_name}'
             if x_scenario > 1:
                 sub_title += f' scenario {x_scenario}'
-            if sum_service_rating < rating_threshold:
-                print(f'Skipping {subset} due to low rating {sum_service_rating} MW < {rating_threshold} MW')
+            # make cases
+            if min_rating_i < min_service_rating:
+                print(f'Skipping {subset} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
                 reward, energy_dict, get_peak_power = 0, {}, 0
-            elif total_dc_gain < min_service_rating:
-                print(f'Skipping {subset} due to low total dc gain {total_dc_gain} MW < {min_service_rating} MW')
-                reward, energy_dict, get_peak_power = 0, {}, 0
+            elif sum_service_rating < rating_threshold:
+                print(f'Skipping {subset} due to low rating {sum_service_rating:.3f} MW < {rating_threshold} MW')
+                reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
+            elif total_dc_gain < min_rating_i:
+                # here, the dvpp will fail for sure, no simulation needed
+                print(f'Skipping {subset} due to low total dc gain {total_dc_gain:.3f} MW < {rating_threshold} MW')
+                reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
             else:
                 reward, energy_dict, get_peak_power = get_DVPP(
                                 IO_dict=subset_io_dict,
@@ -170,7 +189,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                                 adaptive_func=adaptive_func,
                                 sum_service_rating=sum_service_rating,
                                 total_dc_gain=total_dc_gain,
-                                min_service_rating=min_service_rating
+                                min_service_rating=min_rating_i
                                 )
 
             VALUE[subset] = reward
