@@ -32,14 +32,25 @@ def get_banzhaf_value(v: dict, players: list, normalized=True) -> dict:
             banzhaf_values = {k: v * (reward / total_banzhaf) for k, v in banzhaf_values.items()}
     return banzhaf_values
 
-def powerset(iterable):
+def powerset_tuple(iterable,
+             exclude_empty=True) -> list:
     "Subsequences of the iterable from shortest to longest."
-    # powerset([1,2,3]) → () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    s = list(iterable)
+    x = chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
+    if not exclude_empty:
+        x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+    return [tuple(comb) for comb in x]
+
+def powerset(iterable,
+             exclude_empty=False) -> list:
+    "Subsequences of the iterable from shortest to longest."
+    # powerset([1,2,3]) → {}, {1}, {2}, {3}, {1,2}, {1,3}, {2,3}, {1,2,3}
     s = list(iterable)
     x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
     return [frozenset(comb) for comb in x]
 
-def is_convex_game(v: dict, players: list, tol=5e-2) -> bool:
+def is_convex_game(v: dict, players: list, tol=5e-3,
+                   print_warnings=False) -> bool:
     """
     Check if a coalition game is convex.
 
@@ -54,28 +65,51 @@ def is_convex_game(v: dict, players: list, tol=5e-2) -> bool:
                 union = S.union(T)
                 intersection = S.intersection(T)
                 if v[union] + v[intersection] < v[S] + v[T] - tol:
-                    print(f"Game is not convex: {S}, {T}")
+                    if print_warnings: print(f"Game is not convex: {S}, {T}")
                     return False
     return True
 
-# another convexity test: only grand coalition  vs. all other coalitions
-def check_convexity_grand_coalition(v: dict, players: list, tol=5e-2,
-                                    print_max_min_benefit=True) -> bool:
-    grand_coalition = frozenset(players)
-    max_benefit, min_benefit = 0, 1e12
-    for S in powerset(players):
-        if S and S != grand_coalition:
-            T = grand_coalition - S
-            diff = v[grand_coalition] + v[frozenset()] - v[S] - v[T]
-            max_benefit = max(max_benefit, diff)
-            min_benefit = min(min_benefit, diff)
-            if diff + tol < 0:
-                print(f"    Game is not Grand-Coalition convex: {str(S)}, {str(T)}, diff={diff:.2f}")
-                return False
-    print("    Grand-Coalition Convexity holds")
-    if print_max_min_benefit:
-        print(f"        Max benefit: {max_benefit:.2f}, Min benefit: {min_benefit:.2f}")
-    return True
+
+def core_nonempty(v, players):
+    """
+    Check if the core of a TU cooperative game is non-empty.
+
+    Parameters:
+    - v: dict mapping coalitions (as frozensets of players) -> value
+    - players: list of players
+
+    Returns:
+    - True if core is non-empty, False otherwise
+    """
+    N = len(players)
+    player_to_index = {p: i for i, p in enumerate(players)}
+
+    # Efficiency: sum x_i = v(N)
+    A_eq = [[1] * N]
+    b_eq = [v[frozenset(players)]]
+
+    # Inequalities: sum_{i in S} x_i >= v(S)
+    A_ub, b_ub = [], []
+    for r in range(1, N):  # skip empty and grand coalition
+        for S in combinations(players, r):
+            row = [0] * N
+            for i in S:
+                row[player_to_index[i]] = -1  # negate for <= constraint
+            A_ub.append(row)
+            b_ub.append(-v[frozenset(S)])
+
+    # Objective: irrelevant (feasibility), minimize 0
+    c = [0] * N
+
+    res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, method="highs")
+
+    if res.success:
+        print('Core is non-empty, one feasible allocation:', res.x)
+        return True  #, res.x
+    else:
+        return False   #, None
+
+
 
 def get_loo(v: dict, players: list, normalized=True) -> dict:
     """

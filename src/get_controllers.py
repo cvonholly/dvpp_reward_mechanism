@@ -61,6 +61,52 @@ def get_pi_controller(params):
         inputs=['e'], outputs=['u'], states=2,
         params=params)
 
+def pi_update_adap(t, x, u, params={}):
+    # Get the controller parameters that we need
+    kp = params.get('kp')
+    ki = params.get('ki', 0.1)
+    kaw = params.get('kaw', 15 * ki)  # anti-windup gain
+    lower, upper = params.get('saturation_limits', (-np.inf, np.inf))
+    lower, upper = lower * params.get('adaptive_func')(t), upper * params.get('adaptive_func')(t)
+
+    err = u[0]   # error signal
+    z = x[0]     # integrated error
+
+    # Compute unsaturated output
+    u_a = kp * err + ki * z
+
+    # Compute anti-windup compensation (scale by ki to account for structure)
+    u_aw = kaw/ki * (u_a - np.clip(u_a, lower, upper)) if ki != 0 else 0
+
+    # State is the integrated error, minus anti-windup compensation
+    return err - u_aw
+
+def pi_output_adap(t, x, u, params={}):
+    # Get the controller parameters that we need
+    kp = params.get('kp')
+    ki = params.get('ki')
+    lower, upper = params.get('saturation_limits', (-np.inf, np.inf))
+    lower, upper = lower * params.get('adaptive_func')(t), upper * params.get('adaptive_func')(t)
+
+    # Assign variables for inputs and states (for readability)
+    err = u[0]  # error signal
+    z = x[0]    # integrated error
+
+    # PI controller with saturation
+    return np.clip(kp * err + ki * z, lower, upper) # account for saturation
+
+def get_pi_controller_adaptive(params):
+    """
+    create time-varying (adaptive) PI controller with anti-windup
+
+    params: dict with 'kp', 'ki', 'saturation_limits' (tuple), optional: 'kaw' (anti-windup gain)
+        and 'adaptive_func': function(t) -> [0, 1] for saturation limits factor
+    """
+    return ct.NonlinearIOSystem(
+        pi_update_adap, pi_output_adap, name='control',
+        inputs=['e'], outputs=['u'], states=2,
+        params=params)
+
 def sympy_to_tf(T_sym, s=sp.symbols('s')):
     """
     Convert a SymPy rational function T(s) into a python-control TransferFunction.

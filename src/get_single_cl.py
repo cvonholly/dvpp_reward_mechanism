@@ -6,7 +6,7 @@ import control as ct
 def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
                          name: str, title='', tlim=(0, 60),
                          service_rating=1,
-                         scales_hard_constrains=np.array([]),
+                         scales_rating=np.array([]),
                          tol=1e-3,
                          save_path='pics/rewards',
                          print_total_energy=False,
@@ -28,7 +28,8 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
     title: title of plot
     tlim: time limits for the plot (1000 points fixed)
     service_rating: rating of the service in MW (default 1 MW)
-    scales_hard_constrains: values for scaling hard constraints
+    scales_rating: values for scaling hard constraints
+        default: np.linspace(0.1, , 30)
     tol: tolerance for checking system performance
     print_total_energy: print total energy of the system
     """
@@ -40,23 +41,18 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
     peak_powerd_dict = {}   # dictionary for peak power
 
     # scale reference and hard constraints to service rating minus tollerance
-    service_rating = max(service_rating, min_service_rating / scales_hard_constrains[0])   # 0.1 MW is min service rating
     vref = service_rating * vref   # scale by rating
-
-    if name in adaptive_func:  # adapt reference if function is given
-        scaling = adaptive_func[name](t)
-        vref = vref * scaling
-
+    
     # Simulate the closed-loop response
     response = ct.input_output_response(closed_loop, t, vref, x0,
                                         solve_ivp_method='LSODA')
     plant_output = response.outputs[0] if response.outputs.ndim > 1 else response.outputs
     
     # check if unit fulfills test
-    final_rating = service_rating * scales_hard_constrains[0]
+    final_rating = scales_rating[0] * service_rating
     reward = -3 * price * final_rating  # penalty if not fulfilling requirements
     new_hard_constraints = final_rating * min_hard_constrains
-    for scale in scales_hard_constrains:
+    for scale in scales_rating:
         diff = tol + plant_output - scale * service_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
@@ -67,6 +63,17 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
             # failed the test
             break
     
+    # check if minimum rating is reached
+    if final_rating < min_service_rating:
+        reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+
+    # in this case, we have a minimum rating to fulfill
+    if min_service_rating > 0.1:
+        if final_rating < min_service_rating:
+            reward = -3 * price * min_service_rating  # penalty if not fulfilling requirements
+        else:
+            reward = final_rating * price
+
     if not save_pics:  # do not plot
         return reward, {}, {}
 

@@ -5,15 +5,27 @@ import numpy as np
 from src.get_controllers import sympy_to_tf
 
 
-def get_time_constants():
+def get_time_constants() -> dict:
     constants = {}
     constants['PV'] = 1.5
     constants['Wind'] = 2
     constants['BESS'] = 0.1
     constants['SC'] = 0.01
     Rg, Rt, taur = 0.03, 0.38, 5
-    constants['Hydro'] = Rt/Rg*taur  # from Verena paper
+    constants['Hydro'] = 5 # test Rt/Rg*taur  # from Verena paper
+    constants['tau_c'] = 0.081   # time constant used in verenas paper
     return constants
+
+def get_special_pfs() -> dict:
+    # get adpf for systems
+    # only needed if adpf is not just 1st order time constant
+    Rg, Rt = 0.03, 0.38
+    taug, taur, tauw = 0.2, 5, 1
+    adpfs = {}
+    s = ct.tf('s')
+    adpfs['Hydro'] = (taur*s+1) / (Rt/Rg*taur*s+1) * (1-tauw*s) / (1+1/2*tauw*s)
+    return adpfs
+
 
 def get_pv_sys():
     tau_PV = get_time_constants()['PV']
@@ -87,13 +99,13 @@ def get_bess_energy_sys(tau_BESS=0.1, e_max=10):
         update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
     )
 
-def get_sc_io_sys(tau_SC=0.1, t_drop=1, drop_exp=2):
+def get_sc_time_sys(t_drop, drop_exp):
     """
     params:
-        tau_BESS: time constant of the battery
-        t_drop: time after which the battery output starts to drop (in seconds)
+        t_drop: maximum energy capacity of the supercapacitor
+        drop_exp: exponent of the drop function (higher -> faster drop)
     """
-    p_BESS = {'tau': tau_SC, 't_drop': t_drop, 'drop_exp': drop_exp} 
+    p_SC = {'tau': get_time_constants()['SC'], 't_drop': t_drop, 'drop_exp': drop_exp} 
 
     def update(t, x, u, params={}):
         tau = params.get('tau')
@@ -105,11 +117,31 @@ def get_sc_io_sys(tau_SC=0.1, t_drop=1, drop_exp=2):
         return 1/params.get('tau') * x[0] / (max(1, t-params.get('t_drop'))**params.get('drop_exp'))
 
     return ct.NonlinearIOSystem(
-        update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
+        update, output, inputs=['u'], outputs=['y'], states=2, params=p_SC
     )
 
+# def get_sc_time_sys(t_max):
+#     """
+#     params:
+#         t_max: maximum time duration of the supercapacitor
+#     """
+#     p_SC = {'tau': get_time_constants()['SC'], 't_max': t_max} 
+
+#     def update(t, x, u, params={}):
+#         tau = params.get('tau')
+#         x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
+#         x1 = x[0]                         # energy state
+#         return [x0, x1]
+    
+#     def output(t, x, u, params={}):
+#         return 1/params.get('tau') * x[0] * (t <= params.get('t_max'))
+
+#     return ct.NonlinearIOSystem(
+#         update, output, inputs=['u'], outputs=['y'], states=2, params=p_SC
+#     )
+
 def get_ADPF(lpf_devices, bpf_devices, hpf_devices, 
-             IO_dict, sum_service_rating, Gs_diff, adaptive_func,
+             IO_dict, sum_service_rating, dpfs, adaptive_func,
              tau_c=0,
              T_END=60):
     """
@@ -120,42 +152,54 @@ def get_ADPF(lpf_devices, bpf_devices, hpf_devices,
             otherwise the DVPP will not track the reference properly
 
     """
+    # restricted_devices = list(adaptive_func.keys())  # devices which are restricted by time-varying production
     mks = {}
     time_constants = get_time_constants()
     lpf_names = list(lpf_devices.keys())
     thetas = {}
-    for name, g in lpf_devices.items():
+    for name, _  in lpf_devices.items():
         theta_i = IO_dict[name][2] / sum_service_rating
         thetas[name] = theta_i
-        mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs\
+        if name not in adaptive_func:
+            mks[name] = dpfs[name] * theta_i  # ADPF is DPF
+        else:
+            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
     # todo: implement bpf devices
     # for name, g in bpf_devices.items():
     #     if name in Gs_diff: g = Gs_diff[name]  # take other tranfer function if specified
     #     mks[name] = g * (g - Gs_sum)   # Fix intermediate ADPFs as BPFs
     #     Gs_sum += g * (g - Gs_sum)
-    for name, g in hpf_devices.items():
+    for name, _ in hpf_devices.items():
         if len(lpf_names) == 1:
-            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
+            mks[name] = get_adaptive_hpf_for_1lpf(time_constants[lpf_names[0]], adaptive_func[lpf_names[0]], thetas[lpf_names[0]])   # Fix fastest device’s ADPF as HPF
         elif len(lpf_names) == 2:
             mks[name] = get_adaptive_hpf_for_2lpf(time_constants[lpf_names[0]], time_constants[lpf_names[1]], adaptive_func[lpf_names[0]], adaptive_func[lpf_names[1]],
                                                   thetas[lpf_names[0]], thetas[lpf_names[1]],
-                                                  D=np.array([[.75 if T_END>40 else 1]]))   # Fix fastest device’s ADPF as HPF
-    return mks
-
-def get_static_pf_varying_ref(IO_dict, adaptive_func):
-    mks = {}
-    time_constants = get_time_constants()
-    sum_service_rating = sum([specs[2] for _, specs in IO_dict.items()])
-    for name, _ in IO_dict.items():
-        theta_i = IO_dict[name][2] / sum_service_rating
-        if name in adaptive_func:
-            mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
-        else:
-            mks[name] = ct.tf([theta_i], [time_constants[name], 1])  # Define steady-state ADPFs as LPFs
+                                                  D=np.array([[.75 if T_END>1e3 else 1]])
+                                                  )   # Fix fastest device’s ADPF as HPF
     return mks
 
 
-def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1):
+# def get_static_pf_varying_ref(IO_dict, adaptive_func):
+#     """
+#     static PF for the time-varying production case
+
+#     set theta_i = rating_i / sum(rating_j) for all i, j in devices
+#     for time-varying production, get_adaptive_dc_sys(...) is used to scale the steady-state gain
+#     """
+#     mks = {}
+#     time_constants = get_time_constants()
+#     sum_service_rating = sum([specs[2] for _, specs in IO_dict.items()])
+#     for name, _ in IO_dict.items():
+#         theta_i = IO_dict[name][2] / sum_service_rating
+#         if name in adaptive_func:
+#             mks[name] = get_adaptive_dc_sys({'theta': theta_i, 'tau': time_constants[name], 'gain': adaptive_func[name]})  # Define steady-state ADPFs as LPFs
+#         else:
+#             mks[name] = ct.tf([theta_i], [time_constants[name], 1]) 
+#     return mks
+
+
+def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1, theta1):
     """
     params:
         gain: function t -> theta where theta is time-varying dc gain
@@ -165,14 +209,16 @@ def get_adaptive_hpf_for_1lpf(tau1, adaptive_func1):
     D = np.array([[1]])
 
     def update(t, x, u, params={}):
-        return A @ x + B @ u        
+        return params['A'] @ x + params['B'] @ u      
     
     def output(t, x, u, params={}):
-        C = np.array([[-adaptive_func1(t)]])
+        C = np.array([[-params['theta1'] * params['adaptive_func1'](t)]])
         return C @ x + D @ u
     
+    params = {'A': A, 'B': B, 'D': D, 'adaptive_func1': adaptive_func1, 'theta1': theta1}
+    
     return ct.NonlinearIOSystem(
-        update, output, inputs=['u'], outputs=['y'], states=1
+        update, output, inputs=['u'], outputs=['y'], states=1, params=params
     )
 
 def get_adaptive_hpf_for_2lpf(tau1, tau2, adaptive_func1, adaptive_func2,
@@ -201,6 +247,9 @@ def get_adaptive_hpf_for_2lpf(tau1, tau2, adaptive_func1, adaptive_func2,
 
 def get_adaptive_dc_sys(params):
     """
+    get adaptive dc gain for all times:
+        theta_i(t) = theta_i * gain_i(t) where gain_i(t) is a the relative gain of nominal capacity depending on e.g. weather conditions
+
     params:
         gain: function t -> theta where theta is time-varying dc gain
     """
