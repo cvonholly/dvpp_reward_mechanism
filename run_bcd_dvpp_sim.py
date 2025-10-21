@@ -134,15 +134,12 @@ def run_bcd_dvpp_sim(create_io_dict,
 
     # simulate scenarios
     for service, (ts, input, requirement_curve) in services_input.items():
-        #
-        # todo: in future use different probabilities for different services, however now for comaprison reasons, use same
-        #
+        my_path = save_path + '/' + service.replace('-', '_')
         for i, t in enumerate(time_stamps):
             print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, time {t} \n')
 
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
-            my_path = save_path + '/' + service.replace('-', '_')
             save_pics_i = save_pics(i) if callable(save_pics) else save_pics
             bids = {coalition: [] for coalition in powerset_tuple(my_names)}  # bids for all coalitions for this scenario
 

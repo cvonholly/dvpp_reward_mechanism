@@ -33,10 +33,10 @@ def get_optimal_bid(bids, ps,
         print("Probabilities must sum to 1.")
         return 0  # default bid
     if max(bids) > max_bid_value or np.mean(bids) <= 0:
-        print("Bids are: ", bids, " submitting 0 bid (not participating).")
+        print(f"Bids are invalid (max bid: {max(bids):.3f}, mean bid: {np.mean(bids):.3f}), submitting 0 bid (not participating).")
         return 0  # default bid
-
-    # Optimize within a reasonable range
+    
+    # Optimize within a reasonable ranges
     res = minimize_scalar(objective, bounds=(0, max(bids) * 1.5), method='bounded')
 
     b_opt = res.x
