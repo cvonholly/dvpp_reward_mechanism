@@ -12,4 +12,4 @@ Plots for all coalitions can be saved locally. Value and reward mechanisms are v
 
 ## Requirements
 
-install packages: numpy, pandas, python-control, gurobi-py
+install packages: see `requirements.txt`
