@@ -1,10 +1,17 @@
-# %%
+from bisect import bisect
 import gurobipy as gp
 import itertools
 import random
 import matplotlib.pyplot as plt
+import numpy as np
 
-from game_theory_helpers import powerset
+def powerset(iterable,
+             exclude_empty=False) -> list:
+    "frozenset Subsets of the iterable from shortest to longest."
+    # powerset([1,2,3]) → {}, {1}, {2}, {3}, {1,2}, {1,3}, {2,3}, {1,2,3}
+    s = list(iterable)
+    x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+    return [frozenset(comb) for comb in x]
 
 env = gp.Env(empty=True)
 env.setParam("OutputFlag",0)
@@ -15,20 +22,20 @@ def toleq(a:float, b:float, tol:float=1e-6) -> bool:
 
 def nucleolusFullDetail(N, charFun, verbose: bool=False):
     """
-    charFun
+    charFun: value function for each coalition S ⊆ N
+    N: list of players
     """
     n = len(N)
     #  Data PreProcess
     subsets = [S for i in range(n-1) for S in itertools.combinations(N, i+1)]  # subsets excluding empty set and grand coalition
     frozen = {}
-    nucl = {pp:0 for pp in N}
+    nucl = {pp: 0 for pp in N}
     thetas = []
     # The main loop
     while True:
         completed = True
         ## Given the currently frozen coalitions, identifies the minimum possible maximal excess
         M1 = gp.Model("Nucleolus-Phase1", env=env)
-        M1.params.LogToConsole=False
         x = M1.addVars(N, lb=-gp.GRB.INFINITY, name="x")
         excess = M1.addVar(obj=1, lb=-gp.GRB.INFINITY, name="MaxExc")
         for pp in N: # Only interested in imputations
@@ -36,11 +43,11 @@ def nucleolusFullDetail(N, charFun, verbose: bool=False):
         for i, S in enumerate(subsets):
             if S in frozen:
                 M1.addConstr(charFun(S) - gp.quicksum(x[pp] for pp in S) == frozen[S], 
-                name="exc-"+str(i))
+                                name="exc-"+str(i))
             else:
                 completed = False
                 M1.addConstr(charFun(S) - gp.quicksum(x[pp] for pp in S) <= excess, 
-                name="exc-"+str(i)+"F")
+                                name="exc-"+str(i)+"F")
         M1.addConstr(x.sum('*') == charFun(N), name="TotalVal")
         ## If every coalition is frozen, then nothing left to optimize. Otherwise, go ahead.
         if not completed:
@@ -90,6 +97,8 @@ def get_nucleolus(v, players):
     """
     v: v = {frozenset(k): value, ...} where k is a tuple of players in the coalition
     players: list of players
+
+    returns: nucleolus as a dict {player: value, ...}
     """
     # convert v to charFun
     def charFun(S):
@@ -175,8 +184,115 @@ def get_cdf_function(outcomes, probabilities=None):
 
     return cdf
 
-# def get_two_stage_nucleol
+def get_inverse_cdf_function(cdf_func, lower_bound, upper_bound, num_points=1000):
+    """
+    Constructs an inverse CDF function using numerical methods.
+    
+    Parameters:
+    - cdf_func: Function that computes the CDF.
+    - lower_bound: Lower bound of the outcome space.
+    - upper_bound: Upper bound of the outcome space.
+    - num_points: Number of points to sample for constructing the inverse CDF.
+    
+    Returns:
+    - Function that computes the inverse CDF.
+    """
+    xs = np.linspace(lower_bound, upper_bound, num_points)
+    cdf_values = [cdf_func(x) for x in xs]
 
+    def inv_cdf(p):
+        if p < 0.0 or p > 1.0:
+            raise ValueError("p must be in [0, 1]")
+        idx = bisect.bisect_left(cdf_values, p)
+        if idx == 0:
+            return xs[0]
+        elif idx == len(cdf_values):
+            return xs[-1]
+        else:
+            return xs[idx]
+
+    return inv_cdf
+
+def get_bankruptcy_game(vs_priors: list, v_realized: dict, players):
+    """
+    compute bankruptcy game from prior value functions and realized value function
+    """
+    # compute ex-ante rewards
+    first_stage_outcomes, ex_ante_rewards, players_ourtcomes, v_prior = [], [], {p: [] for p in players}, {S: 0 for S in powerset(players)}
+    K = len(vs_priors)
+    for v in vs_priors:
+        reward_ex_ante = get_nucleolus(v, players)
+        first_stage_outcomes.append(reward_ex_ante)
+        ex_ante_rewards.append(sum(reward_ex_ante.values()))
+        for p in players:
+            players_ourtcomes[p].append(reward_ex_ante[p])
+        for k, v in vs.items():
+            v_prior[k] += v / K  # average over K runs
+
+    # compute realized reward
+    rewards_ex_post = get_nucleolus(v_realized, players)
+    total_realized = sum(rewards_ex_post.values())
+
+    # create solution
+    if total_realized < np.mean(ex_ante_rewards) and total_realized > 0:
+        # create bankruptcy game
+        grand_coalition = frozenset(players)
+        claims = {p: sum(players_ourtcomes[p]) / K for p in players}
+        v_bankruptcy = {k: 0 for k in powerset(players)}
+        v_bankruptcy[grand_coalition] = v_realized[grand_coalition]
+        for k, v in v_prior.items():
+            if k != grand_coalition:
+                v_bankruptcy[k] = max(0, total_realized - sum(claims[p] for p in k))
+        rewards_bankruptcy = get_nucleolus(v_bankruptcy, players)
+        return rewards_bankruptcy
+    elif total_realized < 0:
+        # now we have a penalty which we have to distribute
+        # we use value function here as thetas not available
+        # todo
+        return {}
+    else:
+        return rewards_ex_post
+
+
+def get_closed_loop_nucleolus(vs_priors: list, v_realized: dict, players):
+    """
+    compute closed-loop nucleolus from prior value functions and realized value function
+    """
+    # compute ex-ante rewards
+    first_stage_outcomes, ex_ante_rewards, players_ourtcomes, v_prior = [], [], {p: [] for p in players}, {S: 0 for S in powerset(players)}
+    K = len(vs_priors)
+    for v in vs_priors:
+        reward_ex_ante = get_nucleolus(v, players)
+        first_stage_outcomes.append(reward_ex_ante)
+        ex_ante_rewards.append(sum(reward_ex_ante.values()))
+        for p in players:
+            players_ourtcomes[p].append(reward_ex_ante[p])
+        for k, v in vs.items():
+            v_prior[k] += v / K  # average over K runs
+
+    # compute realized reward
+    rewards_ex_post = get_nucleolus(v_realized, players)
+    total_realized = sum(rewards_ex_post.values())
+
+    # create solution
+    if total_realized < np.mean(ex_ante_rewards) and total_realized > 0:
+        # create bankruptcy game
+        grand_coalition = frozenset(players)
+        claims = {p: sum(players_ourtcomes[p]) / K for p in players}
+        v_closed_loop = {k: 0 for k in powerset(players)}
+        v_closed_loop[grand_coalition] = v_realized[grand_coalition]
+        for S, v in v_prior.items():
+            if S != grand_coalition:
+                v_closed_loop[S] = min(v_prior[S], v_realized[S])
+        rewards_closed_loop = get_nucleolus(v_closed_loop, players)
+        return rewards_closed_loop
+    elif total_realized < 0:
+        # now we have a penalty which we have to distribute
+        # we use value function here as thetas not available
+        # todo
+        return {}
+    else:
+        return rewards_ex_post
 
 if __name__ == "__main__":
     Ns = ['A', 'B', 'C']
@@ -184,33 +300,88 @@ if __name__ == "__main__":
     first_stage_outcomes = []
     total_rewards = []
     players_ourtcomes = {p: [] for p in Ns}
-    for k in range(8):
+    vs_first_stage = {S: 0 for S in powerset(Ns)}
+    K = 8
+
+    all_vs = []
+
+    for k in range(K):
         # add some randomness
         vs = {k: 0 for k in powerset(Ns)}
         vs[frozenset(['A', 'B'])] = 40 + random.uniform(-5, 5)
         vs[frozenset(['A', 'C'])] = 50 + random.uniform(-5, 5)
         vs[frozenset(['A', 'B', 'C'])] = 100 + random.uniform(-10, 10)
 
-        v_first_stage = get_nucleolus(vs, Ns)
+        all_vs.append(vs)
 
-        first_stage_outcomes.append(v_first_stage)
-        total_rewards.append(sum(v_first_stage.values()))
+        rewards_first_stage = get_nucleolus(vs, Ns)
+
+        first_stage_outcomes.append(rewards_first_stage)
+        total_rewards.append(sum(rewards_first_stage.values()))
         for p in Ns:
-            players_ourtcomes[p].append(v_first_stage[p])
+            players_ourtcomes[p].append(rewards_first_stage[p])
+        for k, v in vs.items():
+            vs_first_stage[k] += v / K  # average over K runs
     
-    print("First stage nucleolus:", first_stage_outcomes)
+    # print("First stage nucleolus:", first_stage_outcomes)
+    # compute expected reward for each player
+    expected_rewards = {p: sum(players_ourtcomes[p]) / K for p in Ns}
+    print("Expected rewards from first stage nucleolus:", expected_rewards)
 
-    # convert each players reward to cdf
+    # now get second stage reward, smaller then first stage
+    vs = {k: 0 for k in powerset(Ns)}
+    vs[frozenset(['A', 'B'])] = 40 + random.uniform(-5, 5)
+    vs[frozenset(['A', 'C'])] = 50 + random.uniform(-5, 5)
+    vs[frozenset(['A', 'B', 'C'])] = 100 + random.uniform(-10, 10)
+
+    results_second_stage = get_nucleolus(vs, Ns)
+    print("Second stage nucleolus (if negative -> sanction):", results_second_stage)
+
+    # create penalty game
+    grand_coalition = frozenset(Ns)
+    v_penalty = {k: 0 for k in powerset(Ns)}
+    v_penalty[grand_coalition] = vs[grand_coalition]
+    for k, v in vs_first_stage.items():
+        if k != grand_coalition:
+            v_penalty[k] = min(vs_first_stage[k], vs[k])
+    rewards_penalty = get_nucleolus(v_penalty, Ns)
+    print("Penalty nucleolus:", rewards_penalty)
+
+    # # convert each players reward to cdf
     players_cdfs = {p: get_cdf_sections(players_ourtcomes[p]) for p in Ns}
-    # print("Players CDFs:", players_cdfs)    
 
-    for p, cdf in players_cdfs.items():
-        outcomes, cum_probs = zip(*cdf)
-        plt.step(outcomes, cum_probs, where='post', label=p)
-    plt.xlabel('Total Reward')
-    plt.ylabel('Cumulative Probability')
-    plt.title('CDF of Total Rewards from First Stage Nucleolus')
-    plt.grid()
-    plt.ylim(0, 1)
-    plt.legend()
-    plt.show()
+    # construct cdf's for two stage for each coalition
+    # coalition_cdfs = {}
+    value_function_Fx_star = {frozenset({}): 0}  # probabilistic value function for each coalition
+    for S in powerset(Ns):
+        if len(S)>0:
+            def this_cdf(x_inner, S=S):
+                print("Evaluating CDF for coalition:", S, "at x* =", x_inner)
+                # all_coalition_vals = [v[S] for v in all_vs]
+                # coalition allocation is the sum of players allocation in S
+                all_coalition_allocation = [sum(x[p] for p in S) for x in first_stage_outcomes]
+                print("All coalition renumeration for S:", S, "->", all_coalition_allocation)
+                count = sum(1 for alloc in all_coalition_allocation if alloc <= x_inner)
+                return count / K
+            # sum over expected rewards of players in S
+            x_star = sum(expected_rewards[p] for p in S)
+            # construct value function
+            value_function_Fx_star[S] = this_cdf(x_star)
+
+    print("value function for x*:", value_function_Fx_star)
+    
+    # compute nucleolus for the two-stage game
+    rewards_two_stage = get_nucleolus(value_function_Fx_star, Ns)
+    print("Two-stage nucleolus:", rewards_two_stage)
+
+    # # plot cdfs    
+    # # for p, cdf in players_cdfs.items():
+    #     outcomes, cum_probs = zip(*cdf)
+    #     plt.step(outcomes, cum_probs, where='post', label=p)
+    # plt.xlabel('Total Reward')
+    # plt.ylabel('Cumulative Probability')
+    # plt.title('CDF of Total Rewards from First Stage Nucleolus')
+    # plt.grid()
+    # plt.ylim(0, 1)
+    # plt.legend()
+    # plt.show()

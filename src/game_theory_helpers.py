@@ -43,10 +43,12 @@ def powerset_tuple(iterable,
 
 def powerset(iterable,
              exclude_empty=False) -> list:
-    "Subsequences of the iterable from shortest to longest."
+    "frozenset Subsets of the iterable from shortest to longest."
     # powerset([1,2,3]) → {}, {1}, {2}, {3}, {1,2}, {1,3}, {2,3}, {1,2,3}
     s = list(iterable)
     x = chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+    if exclude_empty:
+        x = chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
     return [frozenset(comb) for comb in x]
 
 def is_convex_game(v: dict, players: list, tol=5e-3,
@@ -69,6 +71,18 @@ def is_convex_game(v: dict, players: list, tol=5e-3,
                     return False
     return True
 
+def game_is_superadditive(v: dict, players: list, tol=5e-3,
+                          print_warnings=False) -> bool:
+    """
+    check if game is superadditive: v(S ∪ T) ≥ v(S) + v(T) for all disjoint coalitions S, T
+    """
+    for S in powerset(players, exclude_empty=True):
+        T = frozenset(players) - S
+        union = S.union(T)
+        if v[union] < v[S] + v[T] - tol:
+            if print_warnings: print(f"Game is not superadditive: {S}, {T}")
+            return False
+    return True
 
 def core_nonempty(v, players):
     """

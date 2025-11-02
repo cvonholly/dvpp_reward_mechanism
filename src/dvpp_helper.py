@@ -287,6 +287,7 @@ def get_DVPP(IO_dict,
     if save_plots:
         plt.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png')
         # save response to file
+    plt.close()
 
 
     return reward, energy_dict, peak_powerd_dict

@@ -150,7 +150,9 @@ def simulate_devices_and_limits(IO_dict: dict,
             print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
             # set dc gain and service rating
-            total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
+            # total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
+            # test
+            total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf'])
             # this is tha rating the dvpp can provide, accoring to the forecast
             sum_service_rating = set_service_rating[subset] if set_service_rating else total_dc_gain
             # this is the min rating due to a bid that was placed

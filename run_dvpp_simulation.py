@@ -117,7 +117,9 @@ def run_dvpp_simulation(create_io_dict,
         mask = (wind_solar_dc_gains.index >= start_date) & (wind_solar_dc_gains.index < end_date)
         time_stamps = wind_solar_dc_gains[mask].index
     elif not run_one_week_simulation and Sx==1:
-        # set price to average non-zero price
+        #
+        # running for an average day in year!
+        #   thus manipulate prices to be average of positive prices
         price = prices[prices>0].mean()
         prices = pd.DataFrame([price], columns=prices.columns, index=[0])
         time_stamps = [0]
