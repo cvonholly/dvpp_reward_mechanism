@@ -37,7 +37,7 @@ def get_optimal_bid(bids, ps,
         return 0  # default bid
     
     # Optimize within a reasonable ranges
-    res = minimize_scalar(objective, bounds=(0, max(bids) * 1.5), method='bounded')
+    res = minimize_scalar(objective, bounds=(0, max(bids)), method='bounded')
 
     b_opt = res.x
     # reward_opt = -res.fun

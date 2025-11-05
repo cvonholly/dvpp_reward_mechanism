@@ -37,15 +37,14 @@ from src.get_pv_wind_probs import get_errors, get_prod_forecast_data
 from src. get_optimal_bid import get_optimal_bid
 
 
-def run_bcd_dvpp_sim(create_io_dict,
+def run_case_dvpp_sim(create_io_dict,
                     save_path='pics/new',
                     services_input={'FCR': get_fcr(), 'FFR': get_ffr(), 'FFR-FCR': get_ffr_fcr(), 'FCR-D': get_fcr_d()},
-                    Sx=1,   # number of scenarios to average over
                     STATIC_PF=False,
                     save_pics=True,
                     adaptive_func={},  # adaptive dynamic participation factor function
                     change_roles_for_services={},
-                    include_battery_uncertainty=False,
+                    include_limited_bess=False,
                     save_dvpp_info=False,
                     time_slots=False,
                     hourly_average=True,
@@ -57,7 +56,6 @@ def run_bcd_dvpp_sim(create_io_dict,
     save_path: path to save the data frames and plots
     services_input: dict of services with entries:
         {(service_name): (time_series, max_input_curve, min_requirement_curve)}
-    Sx: number of scenarios to simulate
     STATIC_PF: if True, use static participation factors, else dynamic
     save_pics: if True, save the plots (not recommended for >8 scenarios)
     adaptive_func: dict of adaptive functions for devices with entries:
@@ -66,8 +64,8 @@ def run_bcd_dvpp_sim(create_io_dict,
     change_roles_for_services:
         dict of dicts with entries:
             {(service_name): {(device_name): new_device_type}}
-    include_battery_uncertainty:
-        if True, include uncertainty in battery SoC
+    include_limited_bess:
+        if True, inlcude limited storage of BESS based on previous energy level
     save_dvpp_info:
         if True, save info about the DVPP (devices, ratings, controllers, ...) to csv
     time_slots:
@@ -105,22 +103,15 @@ def run_bcd_dvpp_sim(create_io_dict,
     pf_name = 'ADPF' if (adaptive_func!={} and STATIC_PF=='ADPF') else pf_name
 
     # set scenarios
-    if time_slots:
-        time_stamps = time_slots
-    else:
-        ps = probs_15_min.iloc[:, 0].values # select FFR probabilities for now
-        # select Sx scenarios based on probabilities
-        selected_indices = np.random.choice(len(wind_solar_dc_gains), size=Sx, p=ps)
-        # convert indices to time stamps
-        time_stamps = wind_solar_dc_gains.index[selected_indices]
+    # time stamps: every hour between start and end date
+    time_stamps = wind_solar_dc_gains.loc[time_slots[0]:time_slots[1]].index
     
     # get errors for time slots
     k_errs = {}
     for t in time_stamps:
         k_errs[t] = get_errors(K_errors, t.hour)  # tuple of wind_errors, solar_errors
 
-    if include_battery_uncertainty:
-        df_bat = pd.read_csv('data/battery_soc_profile.csv', sep=';', index_col=0)
+    # set BESS SoC initially full
     
     # save dvpp info
     # print(time_stamps)
@@ -133,15 +124,22 @@ def run_bcd_dvpp_sim(create_io_dict,
             dvpps_info[s]['FCR-D up_price'] = np.repeat(prices.loc[time_stamps, 'FCR_D_up_price'].values, K_errors)
 
     # simulate scenarios
+    T = len(time_stamps)
     for service, (ts, input, requirement_curve) in services_input.items():
         my_path = save_path + '/' + service.replace('-', '_')
         for i, t in enumerate(time_stamps):
-            print(f'========================\n Simulating {service} for scenario {i+1}/{Sx}, time {t} \n')
+            print(f'========================\n Simulating {service} for case {i+1}/{T}, time {t} \n')
 
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
             save_pics_i = save_pics(i) if callable(save_pics) else save_pics
             bids = {coalition: [] for coalition in powerset_tuple(my_names)}  # bids for all coalitions for this scenario
+
+            # check if price is zero
+            if not price > 0:
+                print(f'Price for service {service} at time {t} is zero, skipping...')
+                dvpps_info[service].loc[t] = 0
+                continue
 
             # 1. get forecasted values
             wind_fc, solar_fc = wind_solar_forecast.loc[t][['Wind_forecast', 'Solar_forecast']]
@@ -160,13 +158,13 @@ def run_bcd_dvpp_sim(create_io_dict,
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
-                if include_battery_uncertainty:
-                    # get battery SoC for time
-                    idx_bat = datetime_to_idx(time_stamps[i])
-                    soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
-                    IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
-                else:
-                    soc = 4   # todo: get from somewhere else
+                # if include_limited_bess:
+                #     # get battery SoC for time
+                #     idx_bat = datetime_to_idx(time_stamps[i])
+                #     soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
+                #     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
+                # else:
+                soc = 4   # todo: get from somewhere else
 
                 # service response - forecast
                 VALUE, _, _ = simulate_devices_and_limits(
@@ -207,21 +205,21 @@ def run_bcd_dvpp_sim(create_io_dict,
             if change_roles_for_services:
                 for name, new_type in change_roles_for_services.get(service, {}).items():
                     IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
+
             # get realized values
             dc_gain_Wind = wind_solar_dc_gains['Wind'].loc[t] * power_ratings_dict['Wind']
             dc_gain_PV = wind_solar_dc_gains['Solar'].loc[t] * power_ratings_dict['PV']
             # adjust current io_dict
             IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
             IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
-            if include_battery_uncertainty:
-                # get battery SoC for time
-                idx_bat = datetime_to_idx(time_stamps[i])
-                soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
-                IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
+            # if include_limited_bess:
+            #     # get battery SoC for time
+            #     idx_bat = datetime_to_idx(time_stamps[i])
+            #     soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
+            #     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
 
-            
             # if we have 2. stage, we have to follow the bid we have made
-            bids_lower_bound = {key: b * 0.99 for key, b in set_service_rating.items()}  # margin for error
+            bids_lower_bound = {key: b * .99 for key, b in set_service_rating.items()}  # margin for error
 
             # service response - real
             VALUE, _, _ = simulate_devices_and_limits(
@@ -242,10 +240,7 @@ def run_bcd_dvpp_sim(create_io_dict,
                                         set_service_rating=set_service_rating,
                                         bid_received=bids_lower_bound
             )
-            if Sx == 1:
-                all_values[service] = VALUE
-            else:
-                all_values[(service, i)] = VALUE
+            all_values[(service, i)] = VALUE
             if save_dvpp_info:
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 dvpps_info[service].loc[t, ['real_dc_gain', 'real_reward', 'opt_bid']] = \

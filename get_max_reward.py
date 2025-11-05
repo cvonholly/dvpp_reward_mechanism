@@ -149,14 +149,18 @@ def simulate_devices_and_limits(IO_dict: dict,
         for subset in itertools.combinations(my_names, i):
             print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
-            # set dc gain and service rating
-            # total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
-            # test
-            total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf'])
-            # this is tha rating the dvpp can provide, accoring to the forecast
-            sum_service_rating = set_service_rating[subset] if set_service_rating else total_dc_gain
-            # this is the min rating due to a bid that was placed
-            min_rating_i = bid_received[subset] if bid_received!={} else min_service_rating 
+            # calculate actual dc gain
+            total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
+            # 2 cases: forecasted or real
+            # forecasted: maximize reward
+            if bid_received=={}:
+                sum_service_rating = total_dc_gain
+                min_rating_i = min_service_rating
+            # real: follow bid
+            else:
+                # sum_service_rating is the rating we want to provide
+                sum_service_rating = set_service_rating[subset]
+                min_rating_i = bid_received[subset]
 
             sub_title = f'{title} {"+".join(subset)} {pf_name}'
             if x_scenario > 1:

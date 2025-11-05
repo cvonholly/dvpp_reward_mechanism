@@ -15,7 +15,7 @@ if __name__ == '__main__':
     def get_io_dict():
         return {'PV': (get_pv_sys(), 'lpf', 1),
                 'Wind': (get_wind_sys(), 'lpf', 1),
-                'BESS': (get_bess_energy_sys(e_max=.3), 'hpf', 1)
+                'BESS': (get_bess_energy_sys(e_max=3), 'hpf', 1)
                 }
                 
     run_dvpp_simulation(get_io_dict,

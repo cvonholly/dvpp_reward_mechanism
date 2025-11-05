@@ -80,6 +80,8 @@ def get_bess_io_sys(tau_BESS=0.1, t_drop=7, drop_exp=1.2):
 
 def get_bess_energy_sys(tau_BESS=0.1, e_max=10):
     """
+    OLD VERSION: use get_bess_sys for new version
+
     params:
         tau_BESS: time constant of the battery
         e_max: maximum energy capacity of the battery
@@ -97,6 +99,29 @@ def get_bess_energy_sys(tau_BESS=0.1, e_max=10):
 
     return ct.NonlinearIOSystem(
         update, output, inputs=['u'], outputs=['y'], states=2, params=p_BESS
+    )
+
+def get_bess_sys(tau_BESS=0.1, e_max=10):
+    """
+    NEW VERSION
+
+    params:
+        tau_BESS: time constant of the battery
+        e_max: maximum energy capacity of the battery in Watts * seconds
+    """
+    p_BESS = {'tau': tau_BESS, 'e_max': e_max} 
+
+    def update(t, x, u, params={}):
+        tau = params.get('tau')
+        x0 = - 1/tau * x[0] + u[0]         # np.clip(u[0], -np.inf, E_max - x[1])
+        x1 = x[0] / tau                    # energy state
+        return [x0, x1]
+    
+    def output(t, x, u, params={}):
+        return [1/params.get('tau') * x[0] * (x[1] < params.get('e_max')), x[1]]
+
+    return ct.NonlinearIOSystem(
+        update, output, inputs=['u'], outputs=['y', 'energy'], states=2, params=p_BESS
     )
 
 def get_sc_time_sys(t_drop, drop_exp):
