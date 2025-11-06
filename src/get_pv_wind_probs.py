@@ -113,20 +113,14 @@ def get_errors(K,
     
 
 def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
-                      path_forecast='data/data_wind_solar_2024_25_forecast.csv'):
+                      path_forecast='data/data_wind_solar_2024_25_forecast.csv',
+                      hourly_average=True):
     """
-    get K errors for PV and Wind generation for a some number of hours
-    normalized by max production value
-
+    get production and forecast data for PV and Wind generation
     params:
-        K: int, number of errors to sample
-        hour: int, number of hours to sample from
         path_prod: str, path to production data
         path_forecast: str, path to forecast data
-    
-    returns:
-        errors_wind: list of K errors for wind generation
-        errors_solar: list of K errors for solar generation
+        hourly_average: bool, whether to return hourly averaged data
     """
     # get producition data
     df = pd.read_csv(path_prod, sep=';')
@@ -156,5 +150,9 @@ def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
     df.index = time_stamps
     time_stamps = [ts.tz_localize(None) for ts in df_forecast.index]
     df_forecast.index = time_stamps
+
+    if hourly_average:
+        df = df.resample('H').mean()
+        df_forecast = df_forecast.resample('h').mean()
 
     return df, df_forecast

@@ -294,10 +294,10 @@ if __name__ == "__main__":
         frozenset([1]): 0,
         frozenset([2]): 0,
         frozenset([3]): 0,
-        frozenset([1,2]): 100,
+        frozenset([1,2]): 20,
         frozenset([1,3]): -30,
         frozenset([2,3]): -20,
-        frozenset([1,2,3]): 80
+        frozenset([1,2,3]): -100
     }
     # v = create_bankruptcy_game(players, claims={1:300, 2:200, 3:100}, estate=200)
     print(v)

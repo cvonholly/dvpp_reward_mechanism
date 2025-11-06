@@ -81,8 +81,8 @@ def run_case_dvpp_sim(create_io_dict,
     _, wind_solar_forecast = get_prod_forecast_data()
 
     # get all orders of coalitions
-    all_values = {}
-    forecasted_values = {}
+    realized_values = {}
+    expected_values = {}
     power_ratings_dict = {name: vals[2] for name, vals in create_io_dict().items()}
     my_names = list(power_ratings_dict.keys())
 
@@ -117,7 +117,8 @@ def run_case_dvpp_sim(create_io_dict,
     # print(time_stamps)
     multi_index = pd.MultiIndex.from_product([time_stamps, range(K_errors)])
     dvpps_info = {s: pd.DataFrame([], index=multi_index,
-                              columns=['time_stamps', 'forecasted_dc_gain', 'real_dc_gain', 'forecasted_bid', 'opt_bid', 'forecasted_reward', 'real_reward', 'FFR_price', 'FCR-D up_price', 'bess_soc']) for s in services_input.keys()}
+                              columns=['time_stamps', 'k_dc_gain', 'real_dc_gain', 'k_bid', 'opt_bid', 
+                                       'k_reward', 'expected_reward', 'real_reward', 'FFR_price', 'FCR-D up_price', 'k_bess_soc']) for s in services_input.keys()}
     if save_dvpp_info:
         for s in dvpps_info.keys():
             dvpps_info[s]['FFR_price'] = np.repeat(prices.loc[time_stamps, 'FFR_price'].values, K_errors)
@@ -128,7 +129,7 @@ def run_case_dvpp_sim(create_io_dict,
     for service, (ts, input, requirement_curve) in services_input.items():
         my_path = save_path + '/' + service.replace('-', '_')
         for i, t in enumerate(time_stamps):
-            print(f'========================\n Simulating {service} for case {i+1}/{T}, time {t} \n')
+            print(f'========================\nSimulating {service} for case {i+1}/{T}, time {t}')
 
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
@@ -153,8 +154,8 @@ def run_case_dvpp_sim(create_io_dict,
                     for name, new_type in change_roles_for_services.get(service, {}).items():
                         IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
                 # simulate for this error
-                dc_gain_Wind = (wind_fc + err[0]) * power_ratings_dict['Wind']
-                dc_gain_PV = (solar_fc + err[1]) * power_ratings_dict['PV']
+                dc_gain_Wind = (wind_fc - err[0]) * power_ratings_dict['Wind']
+                dc_gain_PV = (solar_fc - err[1]) * power_ratings_dict['PV']
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
@@ -187,18 +188,25 @@ def run_case_dvpp_sim(create_io_dict,
                 # append to bids
                 for key, rs in VALUE.items():
                     bids[key].append(rs / price)  # append to bids the acheived price
-                forecasted_values[(service, i, k)] = VALUE
+                # forecasted_values[(service, i, k)] = VALUE
                 if save_dvpp_info:
-                    dvpps_info[service].loc[(t, k), ['forecasted_bid', 'forecasted_dc_gain', 'forecasted_reward', 'bess_soc']] = \
+                    dvpps_info[service].loc[(t, k), ['k_bid', 'k_dc_gain', 'k_reward', 'k_bess_soc']] = \
                             [VALUE[idx_grand_coalition]/price, sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc]
 
             # 2. choose optimal bids for all coalition
             set_service_rating = {}
             probs = [1/K_errors for kk in range(K_errors)]
+            i_expected_rewards = {}   # dictionary with expected rewards for all coalitions
             for coalition in bids.keys():
                 c_bids = bids[coalition]
-                b_star_coalition = get_optimal_bid(c_bids, probs)
-                set_service_rating[coalition] = b_star_coalition
+                b_star_coalition, reward, gamma = get_optimal_bid(c_bids, probs, return_reward=True)
+                set_service_rating[coalition] = b_star_coalition * 1.1  # add 10% mark-up for safety. todo: make better solution
+                i_expected_rewards[coalition] = reward * price     # expected value game
+                # if grand coalition, add to dvpp info
+                if save_dvpp_info and len(coalition)==len(my_names):
+                    dvpps_info[service].loc[t, 'expected_reward'] = reward * price
+            expected_values[(service, i)] = i_expected_rewards
+
 
             # 3. stage: real-time operation
             IO_dict = create_io_dict()    # reset io dict for each service
@@ -219,7 +227,7 @@ def run_case_dvpp_sim(create_io_dict,
             #     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
 
             # if we have 2. stage, we have to follow the bid we have made
-            bids_lower_bound = {key: b * .99 for key, b in set_service_rating.items()}  # margin for error
+            bids_lower_bound = {key: b for key, b in set_service_rating.items()} 
 
             # service response - real
             VALUE, _, _ = simulate_devices_and_limits(
@@ -240,18 +248,18 @@ def run_case_dvpp_sim(create_io_dict,
                                         set_service_rating=set_service_rating,
                                         bid_received=bids_lower_bound
             )
-            all_values[(service, i)] = VALUE
+            realized_values[(service, i)] = VALUE
             if save_dvpp_info:
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 dvpps_info[service].loc[t, ['real_dc_gain', 'real_reward', 'opt_bid']] = \
                         [sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], bids_lower_bound[idx_grand_coalition]]
 
     # save values and shapely values
-    df = pd.DataFrame.from_dict(all_values, orient='index')
+    df = pd.DataFrame.from_dict(realized_values, orient='index')
     df.to_csv(f'{save_path}/values_{pf_name}.csv', float_format='%.5f')
 
-    df_forecast = pd.DataFrame.from_dict(forecasted_values, orient='index')
-    df_forecast.to_csv(f'{save_path}/values_forecasted_{pf_name}.csv', float_format='%.5f')
+    df_forecast = pd.DataFrame.from_dict(expected_values, orient='index')
+    df_forecast.to_csv(f'{save_path}/expected_values_{pf_name}.csv', float_format='%.5f')
     
     if save_dvpp_info:
         for s, infos in dvpps_info.items():

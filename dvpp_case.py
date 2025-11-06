@@ -30,6 +30,7 @@ assumptions:
 
 import pandas as pd
 
+from src.get_required_services import get_fcr_d, get_ffr_fcr
 from run_case_dvpp_sim import run_case_dvpp_sim
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
@@ -46,13 +47,14 @@ if __name__ == '__main__':
                 'BESS': (get_bess_energy_sys(e_max=4), 'hpf', battery_cap),
                 }
 
-    start_date, end_date = pd.to_datetime(['2025-04-06 10:00:00', '2025-04-06 14:00:00'])
+    start_date, end_date = pd.to_datetime(['2025-04-06 10:00:00', '2025-04-06 11:00:00'])
 
     run_case_dvpp_sim(get_io_dict,
                         save_path='pics/v_case',
+                        services_input={'FFR-FCR': get_ffr_fcr()},
                         STATIC_PF=False,
                         K_errors=10,   # number of scenarios for the uncertainty
-                        save_pics=False,
+                        save_pics=True,
                         time_slots=(start_date, end_date),
                         save_dvpp_info=True,
                         hourly_average=True,

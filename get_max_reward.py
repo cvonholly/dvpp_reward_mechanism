@@ -147,7 +147,7 @@ def simulate_devices_and_limits(IO_dict: dict,
 
     for i in range(2, len(my_names)+1):
         for subset in itertools.combinations(my_names, i):
-            print('Evaluating subset:', subset)
+            # print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
             # calculate actual dc gain
             total_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
@@ -172,10 +172,10 @@ def simulate_devices_and_limits(IO_dict: dict,
             elif sum_service_rating < rating_threshold:
                 print(f'Skipping {subset} due to low rating {sum_service_rating:.3f} MW < {rating_threshold} MW')
                 reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
-            elif total_dc_gain < min_rating_i:
-                # here, the dvpp will fail for sure, no simulation needed
-                print(f'Skipping {subset} due to low total dc gain {total_dc_gain:.3f} MW < {rating_threshold} MW')
-                reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
+            # elif total_dc_gain < min_rating_i:
+            #     # here, the dvpp will fail for sure, no simulation needed
+            #     print(f'Skipping {subset} due to low total dc gain {total_dc_gain:.3f} MW < {min_rating_i} MW')
+            #     reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
             else:
                 reward, energy_dict, get_peak_power = get_DVPP(
                                 IO_dict=subset_io_dict,

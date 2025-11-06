@@ -25,9 +25,11 @@ def get_wind_solar_dc_gains(get_probability_and_prices_distribution=True,
     df["Datum"] = pd.to_datetime(df["Datum"], format='mixed')
     df.set_index('Datum', inplace=True)
     df.columns = ['Wind', 'Solar']
-    # normalize by max values
-    max_vals = df.max()
-    df_mean = df / max_vals
+    # normalize [0,1]
+    max_wind, max_solar = df['Wind'].max(), df['Solar'].max()
+    df['Wind'] = df['Wind'].clip(lower=0) / max_wind
+    df['Solar'] = df['Solar'].clip(lower=0) / max_solar
+    df_mean = df.copy()
     # remove time zone info
     time_stamps = [ts.tz_localize(None) for ts in df_mean.index]
     df_mean.index = time_stamps
