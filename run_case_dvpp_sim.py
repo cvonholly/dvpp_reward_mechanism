@@ -133,8 +133,11 @@ def run_case_dvpp_sim(create_io_dict,
 
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
+            if service=='FFR-FCR':
+                price = (prices.loc[t, 'FFR_price'] + prices.loc[t, 'FCR_D_up_price']) / 2
             save_pics_i = save_pics(i) if callable(save_pics) else save_pics
             bids = {coalition: [] for coalition in powerset_tuple(my_names)}  # bids for all coalitions for this scenario
+            bids_to_service_rating = {coalition: {} for coalition in powerset_tuple(my_names)}  # mapping bids to service ratings for all coalitions
 
             # check if price is zero
             if not price > 0:
@@ -168,12 +171,12 @@ def run_case_dvpp_sim(create_io_dict,
                 soc = 4   # todo: get from somewhere else
 
                 # service response - forecast
-                VALUE, _, _ = simulate_devices_and_limits(
+                VALUE, _, reference_rating = simulate_devices_and_limits(
                                             IO_dict=IO_dict,
                                             pi_params=pi_params,
                                             input_service_max=input,
                                             curve_service_min=requirement_curve,
-                                            title=f'FORECAST {service}',
+                                            title=f'FORECAST {k} {service}',
                                             T_MAX=ts[-1],
                                             save_path=my_path,
                                             pf_name=pf_name,
@@ -186,21 +189,25 @@ def run_case_dvpp_sim(create_io_dict,
                 )
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 # append to bids
-                for key, rs in VALUE.items():
-                    bids[key].append(rs / price)  # append to bids the acheived price
+                for this_coalition, rs in VALUE.items():
+                    bid = rs / price
+                    bids[this_coalition].append(bid)  # append to bids the acheived price
+                    bids_to_service_rating[this_coalition][bid] = reference_rating[this_coalition]
                 # forecasted_values[(service, i, k)] = VALUE
                 if save_dvpp_info:
                     dvpps_info[service].loc[(t, k), ['k_bid', 'k_dc_gain', 'k_reward', 'k_bess_soc']] = \
                             [VALUE[idx_grand_coalition]/price, sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc]
 
             # 2. choose optimal bids for all coalition
-            set_service_rating = {}
-            probs = [1/K_errors for kk in range(K_errors)]
+            set_service_rating = {}    # reference service value
+            bids_to_submit = {}    # optimal bids which will be submitted for realized value
             i_expected_rewards = {}   # dictionary with expected rewards for all coalitions
+            probs = [1/K_errors for _ in range(K_errors)]
             for coalition in bids.keys():
                 c_bids = bids[coalition]
                 b_star_coalition, reward, gamma = get_optimal_bid(c_bids, probs, return_reward=True)
-                set_service_rating[coalition] = b_star_coalition * 1.1  # add 10% mark-up for safety. todo: make better solution
+                set_service_rating[coalition] = bids_to_service_rating[coalition][b_star_coalition] if b_star_coalition in bids_to_service_rating[coalition] else 0
+                bids_to_submit[coalition] = b_star_coalition
                 i_expected_rewards[coalition] = reward * price     # expected value game
                 # if grand coalition, add to dvpp info
                 if save_dvpp_info and len(coalition)==len(my_names):
@@ -227,7 +234,7 @@ def run_case_dvpp_sim(create_io_dict,
             #     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
 
             # if we have 2. stage, we have to follow the bid we have made
-            bids_lower_bound = {key: b for key, b in set_service_rating.items()} 
+            bids_lower_bound = {key: b for key, b in bids_to_submit.items()} 
 
             # service response - real
             VALUE, _, _ = simulate_devices_and_limits(

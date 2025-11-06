@@ -69,7 +69,6 @@ def get_optimal_bid(bids, ps,
 
     return b_opt
 
-
 if __name__ == "__main__":
     # --- Example Usage ---
     # Competitor bids and their probabilities

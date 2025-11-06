@@ -152,7 +152,7 @@ def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
     df_forecast.index = time_stamps
 
     if hourly_average:
-        df = df.resample('H').mean()
+        df = df.resample('h').mean()
         df_forecast = df_forecast.resample('h').mean()
 
     return df, df_forecast

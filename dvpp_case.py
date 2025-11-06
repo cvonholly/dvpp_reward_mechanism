@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 'BESS': (get_bess_energy_sys(e_max=4), 'hpf', battery_cap),
                 }
 
-    start_date, end_date = pd.to_datetime(['2025-04-06 10:00:00', '2025-04-06 11:00:00'])
+    start_date, end_date = pd.to_datetime(['2025-04-06 10:00:00', '2025-04-06 10:00:00'])
 
     run_case_dvpp_sim(get_io_dict,
                         save_path='pics/v_case',
