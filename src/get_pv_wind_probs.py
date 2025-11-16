@@ -98,6 +98,9 @@ def get_errors(K,
     # remove nan values
     error_wind = error_wind[~error_wind.isna()]
     error_solar = error_solar[~error_solar.isna()]
+    # make mean error zero
+    error_wind = error_wind - error_wind.mean()
+    error_solar = error_solar - error_solar.mean()
     # split by hour of day and get values
     hourly_error_wind = error_wind.groupby([error_wind.index.hour]).apply(list)[hour]
     hourly_error_solar = error_solar.groupby([error_solar.index.hour]).apply(list)[hour]
@@ -145,7 +148,10 @@ def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
     # normalize [0,1]
     df_forecast['Wind_forecast'] = df_forecast['Wind_forecast'].clip(lower=0) / max_wind
     df_forecast['Solar_forecast'] = df_forecast['Solar_forecast'].clip(lower=0) / max_solar
-
+    # make forecast correct to have zero mean error
+    df_forecast['Wind_forecast'] += (df['Wind'] - df_forecast['Wind_forecast']).mean()
+    df_forecast['Solar_forecast'] += (df['Solar'] - df_forecast['Solar_forecast']).mean()
+    # remove timezone info
     time_stamps = [ts.tz_localize(None) for ts in df.index]
     df.index = time_stamps
     time_stamps = [ts.tz_localize(None) for ts in df_forecast.index]

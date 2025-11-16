@@ -23,9 +23,6 @@ assumptions:
             sum_service_rating = set_service_rating[subset]
         else:
             sum_service_rating = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) 
-
-
-
 """
 
 import pandas as pd
@@ -47,14 +44,16 @@ if __name__ == '__main__':
                 'BESS': (get_bess_energy_sys(e_max=4), 'hpf', battery_cap),
                 }
 
-    start_date, end_date = pd.to_datetime(['2025-04-06 10:00:00', '2025-04-06 10:00:00'])
+    # normal scenario period: 2025-04-06 10:00:00
+    # max wind error: 2024-12-19 15:00:00
+    start_date, end_date = pd.to_datetime(['2025-04-06 00:00:00', '2025-04-06 08:00:00'])
 
     run_case_dvpp_sim(get_io_dict,
-                        save_path='pics/v_case',
+                        save_path='pics/v_case_0604',
                         services_input={'FFR-FCR': get_ffr_fcr()},
                         STATIC_PF=False,
-                        K_errors=10,   # number of scenarios for the uncertainty
-                        save_pics=True,
+                        K_errors=20,   # number of scenarios for the uncertainty
+                        save_pics=False,
                         time_slots=(start_date, end_date),
                         save_dvpp_info=True,
                         hourly_average=True,

@@ -52,6 +52,22 @@ def get_DVPP(IO_dict,
     # this means: we always need at least one HPF device
     mks = {}
     Gs_sum = ct.tf([0], [1])   # set sum to zero transfer function
+    n_devices = len(lpf_devices) + len(bpf_devices) + len(hpf_devices)
+    if n_devices==1:
+        # only one device, set as HPF to fulfull sum(mks)=1
+        if len(lpf_devices)==1:
+            lpf_name, lpf_g = list(lpf_devices.items())[0]
+            hpf_devices[lpf_name] = lpf_g
+            # also add to IO_dict
+            IO_dict[lpf_name] = (lpf_g, 'hpf', IO_dict[lpf_name][2])
+            del lpf_devices[lpf_name]
+        elif len(bpf_devices)==1:
+            bpf_name, bpf_g = list(bpf_devices.items())[0]
+            hpf_devices[bpf_name] = bpf_g
+            # also add to IO_dict
+            IO_dict[bpf_name] = (bpf_g, 'hpf', IO_dict[bpf_name][2])
+            del bpf_devices[bpf_name]
+
     if sum([v[2] for v in IO_dict.values() if v[1] == 'lpf']) < 1e-3:
         # LPF devices have near zero capacity
         # ensure there is at least one "HPF" devices such that sum(mks)=1 can be fulfilled

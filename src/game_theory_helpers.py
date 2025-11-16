@@ -71,7 +71,7 @@ def is_convex_game(v: dict, players: list, tol=5e-3,
                     return False
     return True
 
-def game_is_superadditive(v: dict, players: list, tol=5e-3,
+def game_is_superadditive(v: dict, players: list, tol=5e-4,
                           print_warnings=False) -> bool:
     """
     check if game is superadditive: v(S ∪ T) ≥ v(S) + v(T) for all disjoint coalitions S, T

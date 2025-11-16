@@ -34,7 +34,7 @@ from src.get_required_services import *
 from src.game_theory_helpers import powerset_tuple
 
 from src.get_pv_wind_probs import get_errors, get_prod_forecast_data
-from src. get_optimal_bid import get_optimal_bid
+from src.get_optimal_bid import get_optimal_bid
 
 
 def run_case_dvpp_sim(create_io_dict,
@@ -110,8 +110,6 @@ def run_case_dvpp_sim(create_io_dict,
     k_errs = {}
     for t in time_stamps:
         k_errs[t] = get_errors(K_errors, t.hour)  # tuple of wind_errors, solar_errors
-
-    # set BESS SoC initially full
     
     # save dvpp info
     # print(time_stamps)
@@ -119,6 +117,9 @@ def run_case_dvpp_sim(create_io_dict,
     dvpps_info = {s: pd.DataFrame([], index=multi_index,
                               columns=['time_stamps', 'k_dc_gain', 'real_dc_gain', 'k_bid', 'opt_bid', 
                                        'k_reward', 'expected_reward', 'real_reward', 'FFR_price', 'FCR-D up_price', 'k_bess_soc']) for s in services_input.keys()}
+    all_coalitions = powerset_tuple(list(create_io_dict().keys()))
+    bids_df = {s: pd.DataFrame([], index=multi_index,
+                              columns=all_coalitions, dtype=float) for s in services_input.keys()}
     if save_dvpp_info:
         for s in dvpps_info.keys():
             dvpps_info[s]['FFR_price'] = np.repeat(prices.loc[time_stamps, 'FFR_price'].values, K_errors)
@@ -130,6 +131,7 @@ def run_case_dvpp_sim(create_io_dict,
         my_path = save_path + '/' + service.replace('-', '_')
         for i, t in enumerate(time_stamps):
             print(f'========================\nSimulating {service} for case {i+1}/{T}, time {t}')
+            print(f'========================')
 
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
@@ -156,9 +158,9 @@ def run_case_dvpp_sim(create_io_dict,
                 if change_roles_for_services:
                     for name, new_type in change_roles_for_services.get(service, {}).items():
                         IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
-                # simulate for this error
-                dc_gain_Wind = (wind_fc - err[0]) * power_ratings_dict['Wind']
-                dc_gain_PV = (solar_fc - err[1]) * power_ratings_dict['PV']
+                # simulate for this error, minimum is 0
+                dc_gain_Wind = max((wind_fc - err[0]) * power_ratings_dict['Wind'], 0)
+                dc_gain_PV = max((solar_fc - err[1]) * power_ratings_dict['PV'], 0)
                 # adjust current io_dict
                 IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
                 IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
@@ -195,6 +197,7 @@ def run_case_dvpp_sim(create_io_dict,
                     bids_to_service_rating[this_coalition][bid] = reference_rating[this_coalition]
                 # forecasted_values[(service, i, k)] = VALUE
                 if save_dvpp_info:
+                    bids_df[service].loc[(t, k)] = [VALUE[c] / price for c in VALUE.keys()]
                     dvpps_info[service].loc[(t, k), ['k_bid', 'k_dc_gain', 'k_reward', 'k_bess_soc']] = \
                             [VALUE[idx_grand_coalition]/price, sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc]
 
@@ -205,13 +208,13 @@ def run_case_dvpp_sim(create_io_dict,
             probs = [1/K_errors for _ in range(K_errors)]
             for coalition in bids.keys():
                 c_bids = bids[coalition]
-                b_star_coalition, reward, gamma = get_optimal_bid(c_bids, probs, return_reward=True)
+                b_star_coalition, value_wo_price, gamma = get_optimal_bid(c_bids, probs, return_reward=True)
                 set_service_rating[coalition] = bids_to_service_rating[coalition][b_star_coalition] if b_star_coalition in bids_to_service_rating[coalition] else 0
                 bids_to_submit[coalition] = b_star_coalition
-                i_expected_rewards[coalition] = reward * price     # expected value game
+                i_expected_rewards[coalition] = value_wo_price * price     # expected value game
                 # if grand coalition, add to dvpp info
                 if save_dvpp_info and len(coalition)==len(my_names):
-                    dvpps_info[service].loc[t, 'expected_reward'] = reward * price
+                    dvpps_info[service].loc[t, 'expected_reward'] = value_wo_price * price
             expected_values[(service, i)] = i_expected_rewards
 
 
@@ -270,4 +273,6 @@ def run_case_dvpp_sim(create_io_dict,
     
     if save_dvpp_info:
         for s, infos in dvpps_info.items():
-            infos.to_csv(f'{save_path}/dvpp_info_{pf_name}_{s}.csv', index=False)
+            infos.to_csv(f'{save_path}/dvpp_info_{pf_name}_{s}.csv', index=True, float_format='%.5f')
+            # save bids df to csv
+            bids_df[s].to_csv(f'{save_path}/bids_{pf_name}_{s}.csv', index=True, float_format='%.5f')

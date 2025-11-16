@@ -118,36 +118,47 @@ def simulate_devices_and_limits(IO_dict: dict,
     PEAK_POWER = {}
     reference_rating = {}
 
-    for name in my_names:
-        # check if fulfills requirements
-        g_cl = Closed_Loop_systems[name]
-        sub_title = f'{title} {name} {pf_name}'
-        if x_scenario > 1:
-            sub_title += f' scenario {x_scenario}'
-        min_rating_i = bid_received.get((name), 0.1) if bid_received!={} else min_service_rating
-        if min_rating_i < min_service_rating:
-            print(f'Skipping {name} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
-            reward, energy_dict, get_peak_power = 0, {}, 0
-        else:
-            reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
-                                name, tlim=[0, T_MAX],
-                                title=sub_title,
-                                service_rating=IO_dict[name][2],
-                                save_path=save_path,
-                                scales_rating=scales_rating,
-                                print_total_energy=False,
-                                get_peak_power=False,
-                                save_plots=save_plots,
-                                price=price,
-                                save_pics=save_pics,
-                                adaptive_func=adaptive_func,
-                                min_service_rating=min_rating_i)
-        VALUE[(name,)] = reward
-        ENERGY[(name,)] = energy_dict
-        PEAK_POWER[(name,)] = get_peak_power
-        reference_rating[(name,)] = IO_dict[name][2]
+    # for name in my_names:
+    #     # check if fulfills requirements
+    #     g_cl = Closed_Loop_systems[name]
+    #     sub_title = f'{title} {name} {pf_name}'
+    #     if x_scenario > 1:
+    #         sub_title += f' scenario {x_scenario}'
+    #     min_rating_i = bid_received.get((name), 0.1) if bid_received!={} else min_service_rating
+    #     if min_rating_i < min_service_rating:
+    #         print(f'Skipping {name} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
+    #         reward, energy_dict, get_peak_power = 0, {}, 0
+    #     else:
+    #         # 2 cases: 
+    #         #           forecasted or real
+    #         # forecasted: maximize reward
+    #         if bid_received=={}:
+    #             sum_service_rating = lpf_dc_gain
+    #             min_rating_i = min_service_rating
+    #         # real: follow bid
+    #         else:
+    #             # sum_service_rating is the rating we want to provide
+    #             sum_service_rating = set_service_rating[subset]
+    #             min_rating_i = bid_received[subset]
+    #         reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
+    #                             name, tlim=[0, T_MAX],
+    #                             title=sub_title,
+    #                             service_rating=IO_dict[name][2],
+    #                             save_path=save_path,
+    #                             scales_rating=scales_rating,
+    #                             print_total_energy=False,
+    #                             get_peak_power=False,
+    #                             save_plots=save_plots,
+    #                             price=price,
+    #                             save_pics=save_pics,
+    #                             adaptive_func=adaptive_func,
+    #                             min_service_rating=min_rating_i)
+    #     VALUE[(name,)] = reward
+    #     ENERGY[(name,)] = energy_dict
+    #     PEAK_POWER[(name,)] = get_peak_power
+    #     reference_rating[(name,)] = IO_dict[name][2]
 
-    for i in range(2, len(my_names)+1):
+    for i in range(1, len(my_names)+1):
         for subset in itertools.combinations(my_names, i):
             # print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
@@ -174,7 +185,7 @@ def simulate_devices_and_limits(IO_dict: dict,
                 print(f'Skipping {subset} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
                 reward, energy_dict, get_peak_power = 0, {}, 0
             elif sum_service_rating < rating_threshold:
-                print(f'Skipping {subset} due to low rating {sum_service_rating:.3f} MW < {rating_threshold} MW')
+                print(f'Skipping {subset} due to low setpoint {sum_service_rating:.3f} MW < {rating_threshold} MW')
                 reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
             elif all_devices_dc_gain < min_rating_i:
                 # here, the dvpp will fail for sure, no simulation needed
