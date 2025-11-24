@@ -62,7 +62,7 @@ def nucleolusLeastCore(N, charFun, verbose: bool=False):
             thetas.append(theta)
             for pp in N:
                 nucl[pp] = x[pp].X
-            print(f"first stage nucleolus values and excess: {nucl} and {thetas}")
+            # print(f"first stage nucleolus values and excess: {nucl} and {thetas}")
         else:
             break
         #  Prospective elements in the set Sigma (Notation as per Maschler's book)

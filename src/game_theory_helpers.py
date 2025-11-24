@@ -77,14 +77,33 @@ def game_is_superadditive(v: dict, players: list, tol=5e-4,
     check if game is superadditive: v(S ∪ T) ≥ v(S) + v(T) for all disjoint coalitions S, T
     """
     for S in powerset(players, exclude_empty=True):
-        T = frozenset(players) - S
-        union = S.union(T)
-        if v[union] < v[S] + v[T] - tol:
-            if print_warnings: print(f"Game is not superadditive: {S}, {T}")
-            return False
+        for T in powerset(players, exclude_empty=True):
+            if S.isdisjoint(T):
+                union = S.union(T)
+                if v[union] < v[S] + v[T] - tol:
+                    if print_warnings: print(f"Game is not superadditive: {S}, {T}")
+                    return False
     return True
 
-def core_nonempty(v, players):
+def make_game_superadditive(v: dict, players: list) -> dict:
+    """
+    make game superadditive by adjusting values of coalitions
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    players: list of players
+    """
+    v_superadd = v.copy()
+    for S in powerset(players, exclude_empty=True):
+        for T in powerset(players, exclude_empty=True):
+            if S.isdisjoint(T):
+                union = S.union(T)
+                if v_superadd[union] < v_superadd[S] + v_superadd[T]:
+                    v_superadd[union] = v_superadd[S] + v_superadd[T]
+    return v_superadd
+
+def core_nonempty(v, players,
+                  return_allocation=False):
     """
     Check if the core of a TU cooperative game is non-empty.
 
@@ -118,10 +137,16 @@ def core_nonempty(v, players):
     res = linprog(c, A_ub=A_ub, b_ub=b_ub, A_eq=A_eq, b_eq=b_eq, method="highs")
 
     if res.success:
-        print('Core is non-empty, one feasible allocation:', res.x)
-        return True  #, res.x
+        # print('Core is non-empty, one feasible allocation:', res.x)
+        if return_allocation:
+            return True, res.x
+        else:
+            return True
     else:
-        return False   #, None
+        if return_allocation:
+            return False, None
+        else:
+            return False
 
 
 
@@ -217,7 +242,7 @@ def get_nash_bargaining_solution(v: dict, players: list, bargaining_power={}) ->
         {player -> float}
     """
     # start by extracting status quo point: value of single players
-    status_quo = {p: v.get(frozenset({p}), 0) for p in players}
+    status_quo = {p: v.get(frozenset({p})) for p in players}
     # add constraint: sum of values must be less than value of grand coalition
     grand_coalition = frozenset(players)
     total = v.get(grand_coalition, 0)
