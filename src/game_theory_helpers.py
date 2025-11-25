@@ -7,6 +7,9 @@ import numpy as np
 from scipy.optimize import linprog
 import pandas as pd
 
+from src.nucleolus import get_nucleolus
+from src.least_core_nucleolus import get_least_core_nucleolus
+
 
 def get_banzhaf_value(v: dict, players: list, normalized=True) -> dict:
     """
@@ -263,3 +266,166 @@ def get_nash_bargaining_solution(v: dict, players: list, bargaining_power={}) ->
         raise ValueError("Optimization failed.")
     nash_values = {p: result.x[i] for i, p in enumerate(players)}
     return nash_values
+
+
+def solve_optimal_partition(v):
+    """
+    Finds the partition of players that maximizes the sum of values.
+    
+    Args:
+        v (dict): A dictionary where keys are frozensets (coalitions) 
+                  and values are numbers (worth of the coalition).
+    
+    Returns:
+        tuple: (max_value, list_of_coalitions, i.e., [frozenset, ...])
+    """
+    
+    # 1. Identify all unique players
+    all_players = set()
+    for coalition in v.keys():
+        all_players.update(coalition)
+    
+    # Sort players to ensure consistent bitmask mapping
+    players_list = sorted(list(all_players))
+    n = len(players_list)
+    
+    # Map player names to bit indices (0 to n-1)
+    player_to_bit = {player: i for i, player in enumerate(players_list)}
+    
+    # 2. Convert input v (frozensets) to an array indexed by bitmask
+    # 1 << n is 2^n
+    limit = 1 << n
+    
+    # worth[mask] stores the raw v(S) value
+    worth = [0.0] * limit
+    
+    # Iterate over the input dictionary and populate the worth array
+    for coalition, val in v.items():
+        mask = 0
+        for p in coalition:
+            mask |= (1 << player_to_bit[p])
+        worth[mask] = val
+        
+    # 3. Dynamic Programming
+    # dp[mask] stores the Maximum Possible Value for the subset defined by mask
+    # splits[mask] stores the submask that led to the optimal split (for reconstruction)
+    dp = [0.0] * limit
+    best_split = [0] * limit 
+    
+    # Initialize DP with the base coalition values
+    for i in range(limit):
+        dp[i] = worth[i]
+
+    # Iterate through all masks from 1 to 2^n - 1
+    for mask in range(1, limit):
+        # We want to check if splitting 'mask' into 'submask' and 'mask^submask'
+        # yields a higher value than the current known value for 'mask'.
+        
+        # Iterate over all submasks of the current mask.
+        # This standard bitwise trick iterates submasks efficiently.
+        submask = (mask - 1) & mask
+        while submask > 0:
+            current_val = dp[submask] + dp[mask ^ submask]
+            
+            if current_val > dp[mask]:
+                dp[mask] = current_val
+                best_split[mask] = submask # Record that we split here
+            
+            submask = (submask - 1) & mask
+
+    # 4. Reconstruct the Optimal Partition
+    optimal_coalitions = []
+    
+    # Helper recursive function to retrieve parts
+    def reconstruct(mask):
+        if mask == 0:
+            return
+        
+        # If best_split is 0, it means the optimal way for this mask 
+        # is to stay together (the raw coalition value was highest)
+        # OR we didn't find a split better than the original value.
+        # However, we must ensure we don't infinitely recurse if best_split[mask] is 0 
+        # but the mask itself is not empty.
+        split = best_split[mask]
+        
+        if split == 0:
+            # Reconstruct player names from mask
+            coalition = set()
+            for i in range(n):
+                if (mask >> i) & 1:
+                    coalition.add(players_list[i])
+            optimal_coalitions.append(frozenset(coalition))
+        else:
+            # Recursively solve for the two halves
+            reconstruct(split)
+            reconstruct(mask ^ split)
+
+    reconstruct(limit - 1) # Start with the full set of players (Grand Coalition)
+
+    return dp[limit - 1], optimal_coalitions
+
+def evaluate_full_game(df_forecasted: pd.DataFrame,
+                       df_realized: pd.DataFrame) -> pd.DataFrame:
+    # create output df
+    index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
+    # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
+    player_cols = [c for c in df_forecasted.columns if len(c)==1]  # devices cols
+    players = [c[0] for c in df_forecasted.columns if len(c)==1]  # devices
+    columns = players + ['Method']
+    df = pd.DataFrame(pd.NA, index=index, columns=columns)  # all coalition
+    
+    for idx, row in df_forecasted.iterrows():
+        realized_row = df_realized.loc[idx]
+        idx = idx[1]  # adjust index
+        df.loc[(idx, 'Forecasted', 'Value'), players] = row[player_cols].values  # add row to output
+        v = {frozenset(k): val for k, val in row.items()}  # create value function
+        v[frozenset()] = 0
+        # get realized values
+        df.loc[(idx, 'Realized', 'Value'), players] = realized_row[player_cols].values  # add realized row to output
+        v_realized = {frozenset(k): val for k, val in realized_row.items()}  # create value function
+        v_realized[frozenset()] = 0
+        # check if convex
+        if is_convex_game(v, players):
+            df.loc[idx, 'Method'] = 'Shapley'
+            shapley = get_shapley_value(v, players)
+            df.loc[(idx, 'Forecasted', 'Reward'), list(shapley.keys())] = list(shapley.values())
+            shapley = get_shapley_value(v_realized, players)
+            df.loc[(idx, 'Realized', 'Reward'), list(shapley.keys())] = list(shapley.values())
+        # elif check if core non-empty or superadditive
+        elif game_is_superadditive(v, players) or core_nonempty(v, players):
+            df.loc[idx, 'Method'] = 'Nucleolus'
+            # get nucleolus
+            nucleolus = get_nucleolus(v, players)
+            df.loc[(idx, 'Forecasted', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+            # get least core nucleolus as the game may be empty core / not superadditive
+            nucleolus = get_least_core_nucleolus(v_realized, players)
+            df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+        else:
+            df.loc[idx, 'Method'] = 'Sub-Game'
+            # form sub-games
+            max_value, coalitions = solve_optimal_partition(v)
+            for coalition in coalitions:
+                # iterate over coalitions and compute optimal value
+                sub_game_value = v[coalition]
+                if len(coalition) == 1:
+                    # if single device, just assign its value
+                    df.loc[(idx, 'Forecasted', 'Reward'), tuple(coalition)[0]] = sub_game_value
+                    df.loc[(idx, 'Realized', 'Reward'), tuple(coalition)[0]] = v_realized[coalition]
+                else:
+                    v_subgame = {k: val for k, val in v.items() if k.issubset(coalition)}
+                    v_subgame[frozenset()] = 0
+                    if is_convex_game(v_subgame, list(coalition)):
+                        shapley_sub = get_shapley_value(v_subgame, list(coalition))
+                        for p, val in shapley_sub.items():
+                            df.loc[(idx, 'Forecasted', 'Reward'), p] = val
+                        shapley_sub = get_shapley_value({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
+                        for p, val in shapley_sub.items(): 
+                            df.loc[(idx, 'Realized', 'Reward'), p] = val
+                    else:
+                        nucleolus_sub = get_nucleolus(v_subgame, list(coalition))
+                        for p, val in nucleolus_sub.items():
+                            df.loc[(idx, 'Forecasted', 'Reward'), p] = val
+                        nucleolus_sub = get_least_core_nucleolus({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
+                        for p, val in nucleolus_sub.items(): 
+                            df.loc[(idx, 'Realized', 'Reward'), p] = val
+    return df

@@ -48,7 +48,8 @@ def run_case_dvpp_sim(create_io_dict,
                     save_dvpp_info=False,
                     time_slots=False,
                     hourly_average=True,
-                    K_errors=10
+                    K_errors=10,
+                    allow_sub_coalitions=False
                     ):
     """
     create_io_dict: dict of devices with entries:

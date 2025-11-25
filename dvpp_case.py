@@ -46,10 +46,13 @@ if __name__ == '__main__':
 
     # normal scenario period: 2025-04-06 10:00:00
     # max wind error: 2024-12-19 15:00:00
-    start_date, end_date = pd.to_datetime(['2025-04-07 00:00:00', '2025-04-07 23:00:00'])
+    start_date, end_date = pd.to_datetime(['2025-04-08 00:00:00', '2025-04-12 23:00:00'])
+    
+    # allow sub-coalitions to form
+    allow_sub_coalitions = True
 
     run_case_dvpp_sim(get_io_dict,
-                        save_path='pics/v_case_0704',
+                        save_path='pics/v_case',
                         services_input={'FFR-FCR': get_ffr_fcr()},
                         STATIC_PF=False,
                         K_errors=20,   # number of scenarios for the uncertainty
@@ -57,4 +60,5 @@ if __name__ == '__main__':
                         time_slots=(start_date, end_date),
                         save_dvpp_info=True,
                         hourly_average=True,
+                        allow_sub_coalitions=allow_sub_coalitions
                         )
