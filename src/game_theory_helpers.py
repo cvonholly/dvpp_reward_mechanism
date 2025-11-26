@@ -371,7 +371,7 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
     # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
     player_cols = [c for c in df_forecasted.columns if len(c)==1]  # devices cols
     players = [c[0] for c in df_forecasted.columns if len(c)==1]  # devices
-    columns = players + ['Method']
+    columns = players + ['Method', 'Method-Realized']
     df = pd.DataFrame(pd.NA, index=index, columns=columns)  # all coalition
     
     for idx, row in df_forecasted.iterrows():
@@ -428,4 +428,11 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
                         nucleolus_sub = get_least_core_nucleolus({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
                         for p, val in nucleolus_sub.items(): 
                             df.loc[(idx, 'Realized', 'Reward'), p] = val
+        # also calculated realized game Shapley / Nucleolus / Sub-Game
+        if is_convex_game(v_realized, players):
+            df.loc[idx, 'Method-Realized'] = 'Shapley'
+        elif game_is_superadditive(v_realized, players) or core_nonempty(v_realized, players):
+            df.loc[idx, 'Method-Realized'] = 'Nucleolus'
+        else:
+            df.loc[idx, 'Method-Realized'] = 'Sub-Game'
     return df

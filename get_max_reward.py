@@ -15,8 +15,7 @@ plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
 
 """
 
-in this script the reward is calculated for the selected provision provision,
-trying to maximize the reward for the DVPP coalition
+This is the main script for simulaing the DVPP services and calculating the value functions.
 
 PV, Wind, BESS parameters from https://www.researchgate.net/publication/353419981_Automatic_Load_Frequency_Control_in_an_Isolated_Micro-grid_with_Superconducting_Magnetic_Energy_Storage_Unit_using_Integral_Controller
 Hydro, SC from Verena paper
@@ -84,26 +83,7 @@ def simulate_devices_and_limits(IO_dict: dict,
     # get PI controller with physical saturation
     for name, specs in IO_dict.items():
         pi_params[name]['saturation_limits'] = (-specs[2], specs[2])  # -rating, +rating
-    PIs = {}
-    for name in my_names:
-        if name in adaptive_func:
-            pi_params[name]['adaptive_func'] = adaptive_func[name]
-            PIs[name] = get_pi_controller_adaptive(params=pi_params[name])
-        else:
-            PIs[name] = get_pi_controller(params=pi_params[name])
 
-    # same delay as for dpf's
-    small_delay = ct.tf([1], [get_time_constants()['tau_c'], 1], inputs='yref', outputs='yref_delay')
-
-    # create summing junction for error
-    error = ct.summing_junction(['yref_delay', '-y'], 'e')
-
-    # define u, e as output as well
-    u_out = ct.summing_junction(['u'], 'u_out')
-    err_out = ct.summing_junction(['e'], 'err_out')
-
-    # create closed-loop systems
-    Closed_Loop_systems = {name: ct.interconnect([small_delay, error, PIs[name], IO_dict[name][0], u_out, err_out], inputs=['yref'], outputs=['y', 'u_out', 'err_out']) for name in my_names}
 
     ## SET PARAMS FOR DVPP
     # example: Solar PV LPF, Wind LPF and Battery HPF
@@ -111,52 +91,12 @@ def simulate_devices_and_limits(IO_dict: dict,
     my_names = my_names       # specify otherwise if needed
     tau_c = get_time_constants()['tau_c']             # 0.081 in Verena paper
 
-
     # create value function
     VALUE = {}
     ENERGY = {}
     PEAK_POWER = {}
     reference_rating = {}
 
-    # for name in my_names:
-    #     # check if fulfills requirements
-    #     g_cl = Closed_Loop_systems[name]
-    #     sub_title = f'{title} {name} {pf_name}'
-    #     if x_scenario > 1:
-    #         sub_title += f' scenario {x_scenario}'
-    #     min_rating_i = bid_received.get((name), 0.1) if bid_received!={} else min_service_rating
-    #     if min_rating_i < min_service_rating:
-    #         print(f'Skipping {name} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
-    #         reward, energy_dict, get_peak_power = 0, {}, 0
-    #     else:
-    #         # 2 cases: 
-    #         #           forecasted or real
-    #         # forecasted: maximize reward
-    #         if bid_received=={}:
-    #             sum_service_rating = lpf_dc_gain
-    #             min_rating_i = min_service_rating
-    #         # real: follow bid
-    #         else:
-    #             # sum_service_rating is the rating we want to provide
-    #             sum_service_rating = set_service_rating[subset]
-    #             min_rating_i = bid_received[subset]
-    #         reward, energy_dict, get_peak_power = get_single_cl(g_cl, input_service_max, curve_service_min,
-    #                             name, tlim=[0, T_MAX],
-    #                             title=sub_title,
-    #                             service_rating=IO_dict[name][2],
-    #                             save_path=save_path,
-    #                             scales_rating=scales_rating,
-    #                             print_total_energy=False,
-    #                             get_peak_power=False,
-    #                             save_plots=save_plots,
-    #                             price=price,
-    #                             save_pics=save_pics,
-    #                             adaptive_func=adaptive_func,
-    #                             min_service_rating=min_rating_i)
-    #     VALUE[(name,)] = reward
-    #     ENERGY[(name,)] = energy_dict
-    #     PEAK_POWER[(name,)] = get_peak_power
-    #     reference_rating[(name,)] = IO_dict[name][2]
 
     for i in range(1, len(my_names)+1):
         for subset in itertools.combinations(my_names, i):

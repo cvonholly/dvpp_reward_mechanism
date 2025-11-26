@@ -145,8 +145,8 @@ def run_case_dvpp_sim(create_io_dict,
             # check if price is zero
             if not price > 0:
                 print(f'Price for service {service} at time {t} is zero, skipping...')
-                dvpps_info[service].loc[t] = 0
-                bids_df[service].loc[t] = 0
+                # dvpps_info[service].loc[t] = 0
+                # bids_df[service].loc[t] = 0
                 continue
 
             # 1. get forecasted values

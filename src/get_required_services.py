@@ -1,4 +1,4 @@
-from check_qualification import create_curve
+from src.check_qualification import create_curve
 
 def get_ffr(T_MAX_FFR=10, n_points=1000,
             make_step=True):
