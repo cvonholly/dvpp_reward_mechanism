@@ -3,6 +3,13 @@ import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
 
+
+"""
+
+this script generates solar PV and wind power production profiles from meteoblue data files
+
+"""
+
 # --- Configuration & Constants ---
 # FILE_PATH = "dataexport_20251127T161056.csv"  # Ensure this file is in the working directory
 CAPACITY_MW = 100.0
@@ -126,7 +133,7 @@ def apply_wind_model(df):
 
 def generate_energy_profile(start_time, end_time, file_path):
     """
-    Main execution function.
+    generate energy profile from model data in file_path between start_time and end_time.
     
     Args:
         start_time (str): Start datetime in 'YYYY-MM-DD' format.
@@ -154,20 +161,93 @@ def generate_energy_profile(start_time, end_time, file_path):
     df_filtered = apply_wind_model(df_filtered)
     
     # 4. Final Cleanup
-    result = df_filtered[['timestamp', 'solar_mw', 'wind_mw']].round(2)
+    result = df_filtered[['timestamp', 'solar_mw', 'wind_mw']].round(5)
     
     return result
 
-# --- Example Usage ---
+
+# --- Generate Production Profiles ---
 if __name__ == "__main__":
     # Define inputs
     START_DATE = '2023-01-01'
-    END_DATE = '2023-12-31'
+    END_DATE = '2025-08-01'
 
-    file_paths = ['data/meteoblue/meteoblue_forecasted_100m.csv', 'data/meteoblue/meteoblue_realized.csv']
+    file_paths = ['data/meteoblue/meteoblue_NEMS_100m.csv', 'data/meteoblue/meteoblue_ERA5T.csv']
     
-    forecasted = generate_energy_profile(START_DATE, END_DATE, file_paths[0])
-    realized = generate_energy_profile(START_DATE, END_DATE, file_paths[1])
+    realized = generate_energy_profile(START_DATE, END_DATE, file_paths[0])
+    realized['timestamp'] = pd.to_datetime(realized['timestamp'])
+    realized['hours'] = realized['timestamp'].apply(lambda x: x.hour)
+    # for nan values, use previous value to fill
+    realized.fillna(method='ffill', inplace=True)
+    forecasted = realized.copy()
+    
+    print(realized['timestamp'][0])
+
+    """
+    wind forecast from AR(1) model
+    """
+    # Parameters based on Nordic literature
+    MAE_wind = 0.065  # 6.5% of capacity (conservative for Finnish single site)
+    autocorr_coef = 0.70  # Temporal autocorrelation coefficient
+    capacity_MW = 100
+
+    # Generate realized wind production from ERA5
+    P_realized = realized['wind_mw'].values
+
+    # Initialize error array
+    errors = np.zeros(len(P_realized))
+    errors[0] = np.random.normal(0, MAE_wind * capacity_MW * 1.5)  # Initial error
+
+    # Generate autocorrelated errors using AR(1) process
+    for t in range(1, len(P_realized)):
+        # Error scales with production level (heteroscedastic)
+        sigma_t = MAE_wind * capacity_MW * (1 + 0.5 * P_realized[t]/capacity_MW)
+        
+        # AR(1): ε(t) = α·ε(t-1) + σ·η(t)
+        errors[t] = autocorr_coef * errors[t-1] + sigma_t * np.random.normal(0, 1)
+
+    # Create forecast
+    P_forecast = P_realized + errors
+    P_forecast = np.clip(P_forecast, 0, capacity_MW)  # Physical limits
+    forecasted['wind_mw'] = P_forecast
+    """
+    now for solar PV
+    """
+    # Parameters for solar
+    MAE_solar = 0.045  # 4.5% of capacity
+    autocorr_coef = 0.60  # Slightly lower than wind
+    capacity_MW = 100
+
+    # Solar-specific: larger errors during ramps (morning/evening)
+    def diurnal_factor(hour):
+        """Increase error during dawn/dusk transitions"""
+        if 5 <= hour <= 8 or 16 <= hour <= 19:  # Ramp periods
+            return 1.8
+        elif 10 <= hour <= 14:  # Solar noon - more predictable
+            return 0.7
+        else:
+            return 1.0
+
+    P_realized = realized['solar_mw'].values
+    errors = np.zeros(len(P_realized))
+
+    # for t in range(1, len(P_realized)):
+    for t, hour in enumerate(realized['hours'].values):
+        # Error scales with sqrt(production) and diurnal pattern
+        sigma_t = MAE_solar * capacity_MW * diurnal_factor(hour) * np.sqrt(P_realized[t]/capacity_MW + 0.1)
+        
+        errors[t] = autocorr_coef * errors[t-1] + sigma_t * np.random.normal(0, 1)
+
+    P_forecast = P_realized + errors
+    P_forecast = np.clip(P_forecast, 0, capacity_MW)
+    
+
+    forecasted['solar_mw'] = P_forecast
+    
+
+    """
+    check results
+    """
 
     # first, look for  wrong values in dataframes, i.e. greater then 100 or smaller then 0 or nan
     for df, label in zip([forecasted, realized], ['Forecasted', 'Realized']):
@@ -202,6 +282,10 @@ if __name__ == "__main__":
     print(forecast_error['solar_error_mw'].describe())
     print(f"\nWind Forecast Error Statistics (MW):")
     print(forecast_error['wind_error_mw'].describe())
+
+    # save to dataframe
+    realized.to_csv('data/meteoblue/realized_pv_wind_profile.csv', index=False)
+    forecasted.to_csv('data/meteoblue/forecasted_pv_wind_profile.csv', index=False)
 
     
     # plot a week of data for comparison

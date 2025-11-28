@@ -117,13 +117,36 @@ def get_errors(K,
 
 def get_prod_forecast_data(path_prod='data/data_wind_solar_2024_25.csv',
                       path_forecast='data/data_wind_solar_2024_25_forecast.csv',
-                      hourly_average=True):
+                      hourly_average=True,
+                      use_meteoblue=True):
     """
     get production and forecast data for PV and Wind generation
     params:
         path_prod: str, path to production data
         path_forecast: str, path to forecast data
         hourly_average: bool, whether to return hourly averaged data
+    """
+    if use_meteoblue: # new default option
+        df_forecast = pd.read_csv('data/meteoblue/forecasted_pv_wind_profile.csv')
+        df_realized = pd.read_csv('data/meteoblue/realized_pv_wind_profile.csv')
+        # date format: 2025-08-01 00:00:00
+        df_forecast['Datum'] = pd.to_datetime(df_forecast['timestamp'], format='%Y-%m-%d %H:%M:%S')
+        df_realized['Datum'] = pd.to_datetime(df_realized['timestamp'], format='%Y-%m-%d %H:%M:%S')
+        df_forecast.set_index('Datum', inplace=True)
+        df_realized.set_index('Datum', inplace=True)
+        df_forecast.rename({'solar_mw': 'Solar_forecast', 'wind_mw': 'Wind_forecast'}, axis=1, inplace=True)
+        df_realized.rename({'solar_mw': 'Solar', 'wind_mw': 'Wind'}, axis=1, inplace=True)
+        # normalize to 0-1
+        df_forecast['Solar_forecast'] = df_forecast['Solar_forecast'].clip(lower=0) / (df_forecast['Solar_forecast'].max() + 1e-9)
+        df_forecast['Wind_forecast'] = df_forecast['Wind_forecast'].clip(lower=0) / (df_forecast['Wind_forecast'].max() + 1e-9)
+        df_realized['Solar'] = df_realized['Solar'].clip(lower=0) / (df_realized['Solar'].max() + 1e-9)
+        df_realized['Wind'] = df_realized['Wind'].clip(lower=0) / (df_realized['Wind'].max() + 1e-9)
+        
+        return df_realized, df_forecast
+    
+
+    """
+    OLD (delete me soon'ish)
     """
     # get producition data
     df = pd.read_csv(path_prod, sep=';')

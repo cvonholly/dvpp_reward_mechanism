@@ -49,7 +49,8 @@ def run_case_dvpp_sim(create_io_dict,
                     time_slots=False,
                     hourly_average=True,
                     K_errors=10,
-                    allow_sub_coalitions=False
+                    allow_sub_coalitions=False,
+                    use_meteoblue=True
                     ):
     """
     create_io_dict: dict of devices with entries:
@@ -78,8 +79,8 @@ def run_case_dvpp_sim(create_io_dict,
     ------------
     """
     # time series of 15-minute dc gain
-    wind_solar_dc_gains, probs_15_min, prices = get_wind_solar_dc_gains(hourly_average=hourly_average)
-    _, wind_solar_forecast = get_prod_forecast_data()
+    probs_15_min, prices = get_wind_solar_dc_gains(hourly_average=hourly_average)
+    wind_solar_dc_gains, wind_solar_forecast = get_prod_forecast_data(use_meteoblue=use_meteoblue)
 
     # get all orders of coalitions
     realized_values = {}

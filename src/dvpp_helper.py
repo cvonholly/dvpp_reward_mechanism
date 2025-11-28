@@ -14,6 +14,7 @@ def get_DVPP(IO_dict,
             title='', tlim=(0, 60),
             scales_rating=np.array([]),
             tol=1e-2,
+            tol_total_dc_gain=1e-4,
             save_path='pics/rewards',
             print_total_energy=False,
             get_peak_power=False,
@@ -107,10 +108,15 @@ def get_DVPP(IO_dict,
 
     # Dynamic Participation Factors
     if pf_name=='DPF':
-        for name, g in lpf_devices.items():
-            g = IO_dict[name][2] / total_dc_gain * dpfs[name]  # compute dynamic participation factor
-            mks[name] = g  # Define steady-state DPFs as LPFs
-            Gs_sum += g
+        if total_dc_gain > tol_total_dc_gain:
+            for name, g in lpf_devices.items():
+                g = IO_dict[name][2] / total_dc_gain * dpfs[name]  # compute dynamic participation factor
+                mks[name] = g  # Define steady-state DPFs as LPFs
+                Gs_sum += g
+        else:
+            for name, g in lpf_devices.items():
+                mks[name] = ct.tf([0], [1])
+                Gs_sum += ct.tf([0], [1])
         for name, g in bpf_devices.items():
             g = dpfs[name]  # compute dynamic participation factor
             mks[name] = g * (g - Gs_sum)   # Fix intermediate DPFs as BPFs

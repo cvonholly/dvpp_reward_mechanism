@@ -39,7 +39,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               set_service_rating=None,
                               rating_threshold=0.05,
                               min_service_rating=0.1,
-                              bid_received={}
+                              bid_received={},
+                              print_debugging=False
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -122,14 +123,14 @@ def simulate_devices_and_limits(IO_dict: dict,
                 sub_title += f' scenario {x_scenario}'
             # make cases
             if min_rating_i < min_service_rating:
-                print(f'Skipping {subset} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
+                if print_debugging: print(f'Skipping {subset} due to low min rating {min_rating_i:.3f} MW < {min_service_rating} MW')
                 reward, energy_dict, get_peak_power = 0, {}, 0
             elif sum_service_rating < rating_threshold:
-                print(f'Skipping {subset} due to low setpoint {sum_service_rating:.3f} MW < {rating_threshold} MW')
+                if print_debugging: print(f'Skipping {subset} due to low setpoint {sum_service_rating:.3f} MW < {rating_threshold} MW')
                 reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
             elif all_devices_dc_gain < min_rating_i:
                 # here, the dvpp will fail for sure, no simulation needed
-                print(f'Skipping {subset} due to low all dc gain {all_devices_dc_gain:.3f} MW < {min_rating_i} MW')
+                if print_debugging: print(f'Skipping {subset} due to low all dc gain {all_devices_dc_gain:.3f} MW < {min_rating_i} MW')
                 reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
             else:
                 reward, energy_dict, get_peak_power = get_DVPP(
