@@ -53,7 +53,8 @@ def get_pv_wind_probs(day, df_path='../data/data_wind_solar_2024_25.csv'):
 def get_errors(K, 
                hour, 
                path_prod='data/data_wind_solar_2024_25.csv',
-               path_forecast='data/data_wind_solar_2024_25_forecast.csv'):
+               path_forecast='data/data_wind_solar_2024_25_forecast.csv',
+               use_meteoblue=True):
     """
     get K errors for PV and Wind generation for a some number of hours
     normalized by max production value
@@ -68,6 +69,45 @@ def get_errors(K,
         errors:
             of legnth k, tuples with [(wind_err_1, solar_err_1), ...]
     """
+    if use_meteoblue: # new default option
+        df_forecast = pd.read_csv('data/meteoblue/forecasted_pv_wind_profile.csv')
+        df_realized = pd.read_csv('data/meteoblue/realized_pv_wind_profile.csv')
+        # date format: 2025-08-01 00:00:00
+        df_forecast['Datum'] = pd.to_datetime(df_forecast['timestamp'], format='%Y-%m-%d %H:%M:%S')
+        df_realized['Datum'] = pd.to_datetime(df_realized['timestamp'], format='%Y-%m-%d %H:%M:%S')
+        df_forecast.set_index('Datum', inplace=True)
+        df_realized.set_index('Datum', inplace=True)
+        df_forecast.rename({'solar_mw': 'Solar_forecast', 'wind_mw': 'Wind_forecast'}, axis=1, inplace=True)
+        df_realized.rename({'solar_mw': 'Solar', 'wind_mw': 'Wind'}, axis=1, inplace=True)
+        # normalize to [0,1]
+        df_forecast['Solar_forecast'] = df_forecast['Solar_forecast'].clip(lower=0) / (df_forecast['Solar_forecast'].max() + 1e-9)
+        df_forecast['Wind_forecast'] = df_forecast['Wind_forecast'].clip(lower=0) / (df_forecast['Wind_forecast'].max() + 1e-9)
+        df_realized['Solar'] = df_realized['Solar'].clip(lower=0) / (df_realized['Solar'].max() + 1e-9)
+        df_realized['Wind'] = df_realized['Wind'].clip(lower=0) / (df_realized['Wind'].max() + 1e-9)
+
+         # create errors
+        error_wind = df_forecast['Wind_forecast'] - df_realized['Wind']
+        error_solar = df_forecast['Solar_forecast'] - df_realized['Solar']
+        # remove nan values
+        error_wind = error_wind[~error_wind.isna()]
+        error_solar = error_solar[~error_solar.isna()]
+        # make mean error zero
+        error_wind = error_wind - error_wind.mean()
+        error_solar = error_solar - error_solar.mean()
+        # split by hour of day and get values
+        hourly_error_wind = error_wind.groupby([error_wind.index.hour]).apply(list)[hour]
+        hourly_error_solar = error_solar.groupby([error_solar.index.hour]).apply(list)[hour]
+
+        # draw K samples
+        k_err_wind = np.random.choice(hourly_error_wind, size=K).tolist()
+        k_err_solar = np.random.choice(hourly_error_solar, size=K).tolist()
+        
+        # combined
+        err_combined = [(k_err_wind[i], k_err_solar[i]) for i in range(K)]
+
+        return err_combined
+    
+
     # get producition data
     df = pd.read_csv(path_prod, sep=';')
     df.drop('endTime', inplace=True, axis=1)

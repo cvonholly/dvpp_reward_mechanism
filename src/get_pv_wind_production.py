@@ -291,7 +291,7 @@ if __name__ == "__main__":
     # plot a week of data for comparison
     plt.figure(figsize=(12,6))
     # pick dates in summer
-    mask_week = (forecasted['timestamp'] >= '2023-06-01') & (forecasted['timestamp'] < '2023-06-08')
+    mask_week = (forecasted['timestamp'] >= '2025-04-06') & (forecasted['timestamp'] < '2025-04-13')
     plt.plot(forecasted.loc[mask_week, 'timestamp'], forecasted.loc[mask_week, 'solar_mw'], label='Solar Forecasted', color='orange')
     plt.plot(realized.loc[mask_week, 'timestamp'], realized.loc[mask_week, 'solar_mw'], label='Solar Realized', color='red', linestyle='--')
     plt.plot(forecasted.loc[mask_week, 'timestamp'], forecasted.loc[mask_week, 'wind_mw'], label='Wind Forecasted', color='blue')

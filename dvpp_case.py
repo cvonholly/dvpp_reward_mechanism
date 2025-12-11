@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     # normal scenario period: 2025-04-06 10:00:00
     # max wind error: 2024-12-19 15:00:00
-    start_date, end_date = pd.to_datetime(['2025-04-08 00:00:00', '2025-04-08 23:00:00'])
+    start_date, end_date = pd.to_datetime(['2025-04-06 00:00:00', '2025-04-12 23:00:00'])
     
     # allow sub-coalitions to form
     allow_sub_coalitions = True

@@ -2,7 +2,7 @@ import numpy as np
 
 
 def get_optimal_bid(bids, ps,
-                    max_bid_value=1e3,
+                    max_bid_value=1e10,
                     return_reward=False):
     """
     Runs optimization problem to yield the optimal bid value
@@ -19,6 +19,8 @@ def get_optimal_bid(bids, ps,
 
     # Expected reward function (unchanged)
     def expected_reward(b, p, b_k):
+        if b < 0:
+            return -np.inf  # invalid bid
         r_k = np.where(b_k >= b, b, -3 * b)
         return np.sum(p * r_k)
 

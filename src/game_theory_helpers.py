@@ -88,6 +88,30 @@ def game_is_superadditive(v: dict, players: list, tol=5e-4,
                     return False
     return True
 
+def make_forecasted_realized_superadditive(v: dict, 
+                                           v_realized: dict,
+                                           players: list) -> dict:
+    """
+    make forecasted game superadditive and aply same formulation for realized game
+    this represnts coalition S bidding the optimal (partitions) bids and the getting the realized value
+
+    v: Characteristic function of the game, must be defined for EVERY coalition
+        {frozenset -> float}
+    v_realized: Characteristic function of the realized game, must be defined for EVERY coalition
+        {frozenset -> float}
+    players: list of players
+    """
+    v_superadd = v.copy()
+    for S in powerset(players, exclude_empty=True):
+        for T in powerset(players, exclude_empty=True):
+            if S.isdisjoint(T):
+                union = S.union(T)
+                if v_superadd[union] < v_superadd[S] + v_superadd[T]:
+                    v_superadd[union] = v_superadd[S] + v_superadd[T]
+                    v_realized[union] = v_realized[S] + v_realized[T]
+    return v_superadd, v_realized
+
+
 def make_game_superadditive(v: dict, players: list) -> dict:
     """
     make game superadditive by adjusting values of coalitions
@@ -365,7 +389,8 @@ def solve_optimal_partition(v):
     return dp[limit - 1], optimal_coalitions
 
 def evaluate_full_game(df_forecasted: pd.DataFrame,
-                       df_realized: pd.DataFrame) -> pd.DataFrame:
+                       df_realized: pd.DataFrame,
+                       MAKE_games_superadditive=False) -> pd.DataFrame:
     # create output df
     index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
     # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
@@ -384,6 +409,9 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
         df.loc[(idx, 'Realized', 'Value'), players] = realized_row[player_cols].values  # add realized row to output
         v_realized = {frozenset(k): val for k, val in realized_row.items()}  # create value function
         v_realized[frozenset()] = 0
+        # make games superadditive because we want to bid optimally
+        if MAKE_games_superadditive:
+            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players)
         # check if convex
         if is_convex_game(v, players):
             df.loc[idx, 'Method'] = 'Shapley'
