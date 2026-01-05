@@ -6,11 +6,12 @@ def get_ffr(T_MAX_FFR=10, n_points=1000,
     Create FFR service requirement curves
     """
     # FFR
+    t_a = .7  # activation time. is .7s, 1s or 1.3s depending on frequency deviation
     Dp = 1   # set to 1 per unit
     MP_max = 1 *  Dp  # set to 1 per unit * Dp
     START = MP_max if make_step else 0
-    require_ffr = {(0, .7): (0, 0), (.7, 5): (1/Dp, 1/Dp), (5, 10): (1/Dp, 0)}
-    require_ffr_max = {(0, .7): (START, MP_max), (.7, 5): (MP_max, MP_max), (5, 10): (MP_max, 0)}
+    require_ffr = {(0, t_a): (0, 0), (t_a, 5): (1/Dp, 1/Dp), (5, 10): (1/Dp, 0)}
+    require_ffr_max = {(0, t_a): (START, MP_max), (t_a, 5): (MP_max, MP_max), (5, 10): (MP_max, 0)}
     ts_ffr_max, input_ffr_max = create_curve(require_ffr_max, t_max=T_MAX_FFR, n_points=n_points)
     _, curve_ffr_min = create_curve(require_ffr, t_max=T_MAX_FFR, n_points=n_points)
     return ts_ffr_max, input_ffr_max, curve_ffr_min
@@ -47,7 +48,7 @@ def get_fcr_d(T_MAX=60, n_points=1000,
 
 def get_ffr_fcr(T_MAX=60, n_points=1000):
     """
-    Create combined FFR-FCR service requirement curves
+    Create combined FFR + FCR-N service requirement curves
     """
     ts_fcr_max, input_fcr_max, curve_fcr_min = get_fcr(T_MAX_FCR=T_MAX, n_points=n_points,
                                                        make_step=False)
@@ -55,3 +56,15 @@ def get_ffr_fcr(T_MAX=60, n_points=1000):
     curve_ffrfcr_min = curve_fcr_min + curve_ffr_min
     input_ffrfcr_max = input_fcr_max + input_ffr_max
     return ts_fcr_max, input_ffrfcr_max, curve_ffrfcr_min
+
+def get_ffr_fcr_d(T_MAX=60, n_points=1000):
+    """
+    Create combined FFR + FCR-D service requirement curves
+    """
+    ts_fcr_max, input_fcr_max, curve_fcr_min = get_fcr_d(T_MAX=T_MAX, n_points=n_points,
+                                                       make_step=False)
+    _, input_ffr_max, curve_ffr_min = get_ffr(T_MAX_FFR=T_MAX, n_points=n_points)
+    curve_ffrfcr_min = curve_fcr_min + curve_ffr_min
+    input_ffrfcr_max = input_fcr_max + input_ffr_max
+    return ts_fcr_max, input_ffrfcr_max, curve_ffrfcr_min
+

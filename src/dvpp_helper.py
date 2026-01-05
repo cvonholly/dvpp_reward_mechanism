@@ -252,31 +252,24 @@ def get_DVPP(IO_dict,
     energy_dict = {}  # dictionary for total energy
     peak_powerd_dict = {}   # dictionary for peak power
 
-    # Plot results
-    plt.figure(figsize=(12, 8))
+    # set font size
+    plt.rcParams.update({'font.size': 15})
+    linewidth = 3
 
-    plt.subplot(2, 1, 1)
-    plt.plot(t, vref, 'b--', label='Reference', linewidth=2)
-    
-    # plot star at hard constraints
-    plt.plot(t, new_hard_constraints, '*',  color='red', markersize=1, label='Min Hard Constraint')
-    plt.fill_between(t, 0 , new_hard_constraints, color='red', alpha=0.1)
+    # Plot results (refactored to fig, ax)
+    fig, ax = plt.subplots(figsize=(12, 5))
 
-    plt.subplot(2, 1, 1)
-    # first, plot total ouput
-    plt.plot(t, plant_output, linewidth=2, label=f'{name_agg} total output')
+    ax.plot(t, vref, 'b--', label='Reference', linewidth=linewidth)
 
-    # plot every device output and input
+    ax.plot(t, new_hard_constraints, '*', color='red', markersize=1, label='Penalty Region', linewidth=linewidth)
+    ax.fill_between(t, 0, new_hard_constraints, color='red', alpha=0.1)
+
+    ax.plot(t, plant_output, linewidth=linewidth*1.5, label=f'{name_agg} total output')
+
     for name in names:
-        plt.subplot(2, 1, 1)
-        plt.plot(t, responses[name].outputs[0], linewidth=1.5, label=f'{name} at {IO_dict[name][2]:.2f}')
-        # plot reference in same color but dimmer
-        color = plt.gca().lines[-1].get_color()
-        plt.plot(t, responses[name].outputs[1], '--', linewidth=1.5, label=f'{name} reference', color=color, alpha=0.5)
-
-        # plot PI output
-        plt.subplot(2, 1, 2)
-        plt.plot(t, responses[name].outputs[2], '--', label=f'{name} PI output', color=color)
+        ax.plot(t, responses[name].outputs[0], linewidth=linewidth, label=f'{name} rated {IO_dict[name][2]:.1f}MW')
+        color = ax.lines[-1].get_color()
+        ax.plot(t, responses[name].outputs[1], '--', linewidth=linewidth, label=f'{name} reference', color=color, alpha=0.5)
 
         if print_total_energy:
             energy = np.trapz(responses[name].outputs[0], x=t)
@@ -289,27 +282,28 @@ def get_DVPP(IO_dict,
 
             print('========================================')
 
-    plt.subplot(2, 1, 1)
-    plt.legend(loc='upper right')
-    final_title = title + f', Reward: {reward:.2f}€, at {final_rating:.2f}MW'
-    plt.title(final_title)
-    plt.grid(True)
-    plt.xlabel('Time [s]')
-    plt.ylabel('Output')
-    plt.xlim(tlim)
+    final_title = title + f', Reward: {reward:.1f}€'
+    ax.set_title(final_title)
+    ax.grid(True)
+    ax.set_xlabel('Time [s]')
+    ax.set_ylabel('Output')
+    ax.set_xlim(tlim)
 
-    plt.subplot(2, 1, 2)
-    plt.xlabel('Time [s]')
-    plt.ylabel('U')
-    plt.xlim(tlim)
-    plt.legend(loc='upper right')
-    plt.grid(True)
-    plt.tight_layout()
+    # place legend outside top-right
+    fig.subplots_adjust(right=0.80)
+    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0))
+
+    # plt.subplot(2, 1, 2)
+    # plt.xlabel('Time [s]')
+    # plt.ylabel('U')
+    # plt.xlim(tlim)
+    # plt.legend(loc='upper right')
+    # plt.grid(True)
+    # plt.tight_layout()
 
     if save_plots:
-        plt.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png')
-        # save response to file
-    plt.close()
+        fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png', bbox_inches='tight')
+    plt.close(fig)
 
 
     return reward, energy_dict, peak_powerd_dict

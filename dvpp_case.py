@@ -27,7 +27,7 @@ assumptions:
 
 import pandas as pd
 
-from src.get_required_services import get_fcr_d, get_ffr_fcr
+from src.get_required_services import get_fcr_d, get_ffr_fcr, get_ffr_fcr_d
 from run_case_dvpp_sim import run_case_dvpp_sim
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
@@ -46,17 +46,22 @@ if __name__ == '__main__':
 
     # normal scenario period: 2025-04-06 10:00:00
     # max wind error: 2024-12-19 15:00:00
-    start_date, end_date = pd.to_datetime(['2025-04-06 00:00:00', '2025-04-12 23:00:00'])
+    # normal period: 2025-04-06 00:00:00 to 2025-04-12 23:00:00
+    start_date, end_date = pd.to_datetime(['2025-04-09 8:00:00', '2025-04-09 18:00:00'])
     
     # allow sub-coalitions to form
     allow_sub_coalitions = True
 
+    def save_pics(i):
+        return i < 3  # save pics for first 3 scenarios only
+
     run_case_dvpp_sim(get_io_dict,
-                        save_path='pics/v_meteoblue',
-                        services_input={'FFR-FCR': get_ffr_fcr()},
+                        # save_path='pics/v_ffr_fcrd',
+                        save_path='pics/v_TESTING',
+                        services_input={'FFR + FCR-D': get_ffr_fcr_d()},
                         STATIC_PF=False,
-                        K_errors=20,   # number of scenarios for the uncertainty
-                        save_pics=False,
+                        K_errors=20,  # change to 20!!! # number of scenarios for the uncertainty
+                        save_pics=save_pics,
                         time_slots=(start_date, end_date),
                         save_dvpp_info=True,
                         hourly_average=True,

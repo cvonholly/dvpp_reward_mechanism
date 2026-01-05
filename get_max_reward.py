@@ -40,7 +40,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               rating_threshold=0.05,
                               min_service_rating=0.1,
                               bid_received={},
-                              print_debugging=False
+                              print_debugging=False,
+                              BESS_REF_FAC=1/2
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -69,6 +70,9 @@ def simulate_devices_and_limits(IO_dict: dict,
     bid_received:
         dict with entries {(name1, name2, ...): bid} to set the received bid for each coalition
         if empty: no bids are considered and maximum reward is calculated
+    BESS_REF_FAC:
+        factor to multiply the BESS rating to get the reference power for BESS, default is 1/2
+         this is due to the limited energy of the BESS, so it needs to resreve capacity to achieve its reward
 
     OUTPUT:
         plots of the responses
@@ -104,7 +108,11 @@ def simulate_devices_and_limits(IO_dict: dict,
             # print('Evaluating subset:', subset)
             subset_io_dict = {k: v for k, v in IO_dict.items() if k in subset}
             # calculate actual dc gain
-            lpf_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
+            if subset == ('BESS',):
+                # special case for BESS only
+                lpf_dc_gain = sum([v[2] * BESS_REF_FAC for v in subset_io_dict.values()])
+            else:
+                lpf_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
             all_devices_dc_gain = sum([v[2] for v in subset_io_dict.values()])
             # 2 cases: 
             #           forecasted or real
