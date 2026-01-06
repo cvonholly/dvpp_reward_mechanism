@@ -45,6 +45,7 @@ def run_case_dvpp_sim(create_io_dict,
                     adaptive_func={},  # adaptive dynamic participation factor function
                     change_roles_for_services={},
                     include_limited_bess=False,
+                    set_special_ratings={},
                     save_dvpp_info=False,
                     time_slots=False,
                     hourly_average=True,
@@ -68,6 +69,10 @@ def run_case_dvpp_sim(create_io_dict,
             {(service_name): {(device_name): new_device_type}}
     include_limited_bess:
         if True, inlcude limited storage of BESS based on previous energy level
+    set_special_ratings:
+        dict with entries:
+            {(service_name): {(coalition_tuple): service_rating}}
+        to set special service ratings for specific coalitions and services. service_rating is a percentage of the DC gain i.e., 0.5 means 50% of the DC gain
     save_dvpp_info:
         if True, save info about the DVPP (devices, ratings, controllers, ...) to csv
     time_slots:
@@ -190,7 +195,8 @@ def run_case_dvpp_sim(create_io_dict,
                                             dpfs=dpfs,
                                             save_pics=False,
                                             adaptive_func=adaptive_func,
-                                            service=service
+                                            service=service,
+                                            set_special_ratings=set_special_ratings.get(service, {})
                 )
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 # append to bids
@@ -233,6 +239,7 @@ def run_case_dvpp_sim(create_io_dict,
             # adjust current io_dict
             IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
             IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
+            # df_bat = pd.read_csv('data/battery_soc_profile.csv', parse_dates=['DateTime'], index_col='DateTime')
             # if include_limited_bess:
             #     # get battery SoC for time
             #     idx_bat = datetime_to_idx(time_stamps[i])
@@ -259,7 +266,8 @@ def run_case_dvpp_sim(create_io_dict,
                                         adaptive_func=adaptive_func,
                                         service=service,
                                         set_service_rating=set_service_rating,
-                                        bid_received=bids_lower_bound
+                                        bid_received=bids_lower_bound,
+                                        set_special_ratings=set_special_ratings.get(service, {})
             )
             realized_values[(service, i)] = VALUE
             if save_dvpp_info:

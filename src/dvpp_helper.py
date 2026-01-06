@@ -68,8 +68,7 @@ def get_DVPP(IO_dict,
             # also add to IO_dict
             IO_dict[bpf_name] = (bpf_g, 'hpf', IO_dict[bpf_name][2])
             del bpf_devices[bpf_name]
-
-    if sum([v[2] for v in IO_dict.values() if v[1] == 'lpf']) < 1e-3:
+    elif sum([v[2] for v in IO_dict.values() if v[1] == 'lpf']) < 1e-3:
         # LPF devices have near zero capacity
         # ensure there is at least one "HPF" devices such that sum(mks)=1 can be fulfilled
         if len(bpf_devices)>0:

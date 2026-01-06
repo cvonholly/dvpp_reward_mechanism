@@ -41,28 +41,33 @@ if __name__ == '__main__':
     def get_io_dict():
         return {'PV': (get_pv_sys(), 'lpf', solar_cap),
                 'Wind': (get_wind_sys(), 'lpf', wind_cap),
-                'BESS': (get_bess_energy_sys(e_max=4), 'hpf', battery_cap),
+                'BESS': (get_bess_energy_sys(e_max=8), 'hpf', battery_cap),
                 }
 
     # normal scenario period: 2025-04-06 10:00:00
     # max wind error: 2024-12-19 15:00:00
     # normal period: 2025-04-06 00:00:00 to 2025-04-12 23:00:00
-    start_date, end_date = pd.to_datetime(['2025-04-09 8:00:00', '2025-04-09 18:00:00'])
+    start_date, end_date = pd.to_datetime(['2025-04-06 00:00:00', '2025-04-12 23:00:00'])
     
     # allow sub-coalitions to form
     allow_sub_coalitions = True
 
-    def save_pics(i):
-        return i < 3  # save pics for first 3 scenarios only
+    # def save_pics(i):
+    #     return i < 3  # save pics for first 3 scenarios only
 
     run_case_dvpp_sim(get_io_dict,
                         # save_path='pics/v_ffr_fcrd',
-                        save_path='pics/v_TESTING',
+                        save_path='pics/v_update_050126',
                         services_input={'FFR + FCR-D': get_ffr_fcr_d()},
                         STATIC_PF=False,
                         K_errors=20,  # change to 20!!! # number of scenarios for the uncertainty
-                        save_pics=save_pics,
+                        save_pics=False,
                         time_slots=(start_date, end_date),
+                        set_special_ratings={
+                            'FFR + FCR-D': {
+                                ('BESS',): 0.5,  # 50 percent of the DC gain
+                            }
+                        },
                         save_dvpp_info=True,
                         hourly_average=True,
                         allow_sub_coalitions=allow_sub_coalitions
