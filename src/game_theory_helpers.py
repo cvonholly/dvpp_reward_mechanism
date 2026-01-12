@@ -90,7 +90,8 @@ def game_is_superadditive(v: dict, players: list, tol=5e-4,
 
 def make_forecasted_realized_superadditive(v: dict, 
                                            v_realized: dict,
-                                           players: list) -> dict:
+                                           players: list,
+                                           print_warnings=False) -> dict:
     """
     make forecasted game superadditive and aply same formulation for realized game
     this represnts coalition S bidding the optimal (partitions) bids and the getting the realized value
@@ -107,12 +108,26 @@ def make_forecasted_realized_superadditive(v: dict,
             if S.isdisjoint(T):
                 union = S.union(T)
                 if v_superadd[union] < v_superadd[S] + v_superadd[T]:
+                    if print_warnings: print(f"Making game superadditive for: {S}, {T}")
                     v_superadd[union] = v_superadd[S] + v_superadd[T]
                     v_realized[union] = v_realized[S] + v_realized[T]
     return v_superadd, v_realized
 
+def is_superadditive_game(v: dict, players: list, tol=5e-4,
+                          print_warnings=False) -> bool:
+    """
+    check if game is superadditive: v(S ∪ T) ≥ v(S) + v(T) for all disjoint coalitions S, T
+    """
+    for S in powerset(players, exclude_empty=True):
+        for T in powerset(players, exclude_empty=True):
+            if S.isdisjoint(T):
+                union = S.union(T)
+                if v[union] < v[S] + v[T] - tol:
+                    if print_warnings: print(f"Game is not superadditive: {S}, {T}")
+                    return False
+    return True
 
-def make_game_superadditive(v: dict, players: list) -> dict:
+def make_game_superadditive(v: dict, players: list, print_warnings=False) -> dict:
     """
     make game superadditive by adjusting values of coalitions
 
@@ -390,7 +405,8 @@ def solve_optimal_partition(v):
 
 def evaluate_full_game(df_forecasted: pd.DataFrame,
                        df_realized: pd.DataFrame,
-                       MAKE_games_superadditive=False) -> pd.DataFrame:
+                       MAKE_games_superadditive=False,
+                       print_warnings=False) -> pd.DataFrame:
     # create output df
     index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
     # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
@@ -411,7 +427,7 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
         v_realized[frozenset()] = 0
         # make games superadditive because we want to bid optimally
         if MAKE_games_superadditive:
-            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players)
+            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
         # check if convex
         if is_convex_game(v, players):
             df.loc[idx, 'Method'] = 'Shapley'

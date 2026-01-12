@@ -51,7 +51,8 @@ def run_case_dvpp_sim(create_io_dict,
                     hourly_average=True,
                     K_errors=10,
                     allow_sub_coalitions=False,
-                    use_meteoblue=True
+                    use_meteoblue=True,
+                    HPF_DC_factor=0,
                     ):
     """
     create_io_dict: dict of devices with entries:
@@ -196,7 +197,8 @@ def run_case_dvpp_sim(create_io_dict,
                                             save_pics=False,
                                             adaptive_func=adaptive_func,
                                             service=service,
-                                            set_special_ratings=set_special_ratings.get(service, {})
+                                            set_special_ratings=set_special_ratings.get(service, {},),
+                                            HPF_DC_factor=HPF_DC_factor
                 )
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 # append to bids
@@ -267,7 +269,8 @@ def run_case_dvpp_sim(create_io_dict,
                                         service=service,
                                         set_service_rating=set_service_rating,
                                         bid_received=bids_lower_bound,
-                                        set_special_ratings=set_special_ratings.get(service, {})
+                                        set_special_ratings=set_special_ratings.get(service, {}),
+                                        HPF_DC_factor=HPF_DC_factor
             )
             realized_values[(service, i)] = VALUE
             if save_dvpp_info:

@@ -12,6 +12,13 @@ from src.get_single_cl import get_single_cl
 from src.get_controllers import get_pi_controller, get_pi_controller_adaptive
 from src.get_device_systems import get_time_constants
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=plt.cm.Dark2.colors)
+plt.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    # "font.serif": ["Computer Modern Roman"],
+    "mathtext.fontset": "cm", # 'cm' stands for Computer Modern
+    "font.size": 15,  # plt.rcParams.update({'font.size': 15})
+})
 
 """
 
@@ -41,7 +48,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               min_service_rating=0.1,
                               bid_received={},
                               print_debugging=False,
-                              set_special_ratings={}
+                              set_special_ratings={},
+                              HPF_DC_factor=0
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -112,7 +120,7 @@ def simulate_devices_and_limits(IO_dict: dict,
             if subset in set_special_ratings:
                 lpf_dc_gain = sum([v[2] for v in subset_io_dict.values()]) * set_special_ratings[subset]
             else:
-                lpf_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()])
+                lpf_dc_gain = sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf'] + [HPF_DC_factor * v[2] for v in subset_io_dict.values() if v[1]=='hpf']) if service!='FFR' else sum([v[2] for v in subset_io_dict.values()]) #sum([v[2] for v in subset_io_dict.values() if v[1]=='lpf'] + [v[2] * set_special_ratings['hpf'] for v in subset_io_dict.values() if v[1]=='hpf']) 
             all_devices_dc_gain = sum([v[2] for v in subset_io_dict.values()])
             # 2 cases: 
             #           forecasted or real

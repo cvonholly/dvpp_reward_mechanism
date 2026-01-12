@@ -252,7 +252,6 @@ def get_DVPP(IO_dict,
     peak_powerd_dict = {}   # dictionary for peak power
 
     # set font size
-    plt.rcParams.update({'font.size': 15})
     linewidth = 3
 
     # Plot results (refactored to fig, ax)
@@ -260,8 +259,8 @@ def get_DVPP(IO_dict,
 
     ax.plot(t, vref, 'b--', label='Reference', linewidth=linewidth)
 
-    ax.plot(t, new_hard_constraints, '*', color='red', markersize=1, label='Penalty Region', linewidth=linewidth)
-    ax.fill_between(t, 0, new_hard_constraints, color='red', alpha=0.1)
+    ax.plot(t, new_hard_constraints, '*', color='red', markersize=1, linewidth=linewidth)
+    ax.fill_between(t, 0, new_hard_constraints, color='red', alpha=0.1, label='Penalty Region')
 
     ax.plot(t, plant_output, linewidth=linewidth*1.5, label=f'{name_agg} total output')
 
@@ -281,11 +280,11 @@ def get_DVPP(IO_dict,
 
             print('========================================')
 
-    final_title = title + f', Reward: {reward:.1f}€'
+    final_title = title.replace('FCR-D', r'$\mathrm{FCR-D^{up}}$') + f', Reward: {reward:.1f}€'
     ax.set_title(final_title)
     ax.grid(True)
-    ax.set_xlabel('Time [s]')
-    ax.set_ylabel('Output')
+    ax.set_xlabel('time (s)')
+    ax.set_ylabel('active power (MW)')
     ax.set_xlim(tlim)
 
     # place legend outside top-right
@@ -303,7 +302,6 @@ def get_DVPP(IO_dict,
     if save_plots:
         fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png', bbox_inches='tight')
     plt.close(fig)
-
 
     return reward, energy_dict, peak_powerd_dict
 

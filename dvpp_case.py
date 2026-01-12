@@ -37,11 +37,12 @@ if __name__ == '__main__':
     rel = .1  # 10 percent of the capacity
     wind_cap = 216 * rel  # MW
     solar_cap = 150 * rel  # MW
-    battery_cap, battery_energy = 25 * rel, 50 * rel * 3600 # MW, MWh
+    battery_cap, battery_energy = 150 * rel, 50 * rel * 3600 # MW, MWh
+    HPF_DC_factor = .25  # 25 percent of the DC gain
     def get_io_dict():
         return {'PV': (get_pv_sys(), 'lpf', solar_cap),
                 'Wind': (get_wind_sys(), 'lpf', wind_cap),
-                'BESS': (get_bess_energy_sys(e_max=8), 'hpf', battery_cap),
+                'BESS': (get_bess_energy_sys(e_max=battery_energy), 'hpf', battery_cap),
                 }
 
     # normal scenario period: 2025-04-06 10:00:00
@@ -57,7 +58,7 @@ if __name__ == '__main__':
 
     run_case_dvpp_sim(get_io_dict,
                         # save_path='pics/v_ffr_fcrd',
-                        save_path='pics/v_update_050126',
+                        save_path='pics/v_update_120126',
                         services_input={'FFR + FCR-D': get_ffr_fcr_d()},
                         STATIC_PF=False,
                         K_errors=20,  # change to 20!!! # number of scenarios for the uncertainty
@@ -65,10 +66,11 @@ if __name__ == '__main__':
                         time_slots=(start_date, end_date),
                         set_special_ratings={
                             'FFR + FCR-D': {
-                                ('BESS',): 0.5,  # 50 percent of the DC gain
+                                ('BESS',): HPF_DC_factor,  # x percent of the DC gain
                             }
                         },
                         save_dvpp_info=True,
                         hourly_average=True,
-                        allow_sub_coalitions=allow_sub_coalitions
+                        allow_sub_coalitions=allow_sub_coalitions,
+                        HPF_DC_factor=HPF_DC_factor
                         )
