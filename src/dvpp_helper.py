@@ -280,7 +280,7 @@ def get_DVPP(IO_dict,
 
             print('========================================')
 
-    final_title = title.replace('FCR-D', r'$\mathrm{FCR-D^{up}}$') + f', Reward: {reward:.1f}€'
+    final_title = title.replace('FFR + FCR-D', r'$\mathrm{FFR + FCR-D^{up}}$') + f', Reward: {reward:.1f}€'
     ax.set_title(final_title)
     ax.grid(True)
     ax.set_xlabel('time (s)')
@@ -300,7 +300,7 @@ def get_DVPP(IO_dict,
     # plt.tight_layout()
 
     if save_plots:
-        fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png', bbox_inches='tight')
+        fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png', bbox_inches='tight', dpi=600)
     plt.close(fig)
 
     return reward, energy_dict, peak_powerd_dict

@@ -40,7 +40,7 @@ def get_fcr_d(T_MAX=60, n_points=1000,
     DFINAL = 1
     DMAX = 1 
     DMAX_FINAL = 1.05
-    START = DMAX if make_step else 0
+    START = DMAX if make_step else .25
     require_fcr_d = {(0.05, 7.5): (0, D1), (7.5, T_MAX): (D1, DFINAL)}
     require_fcr_d_max = {(0, 7.5): (START, DMAX), (7.5, T_MAX): (DMAX, DMAX_FINAL)}
     ts_fcr_d_max, input_fcr_d_max = create_curve(require_fcr_d_max, t_max=T_MAX, n_points=n_points)

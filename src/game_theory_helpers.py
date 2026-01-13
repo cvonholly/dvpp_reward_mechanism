@@ -406,7 +406,8 @@ def solve_optimal_partition(v):
 def evaluate_full_game(df_forecasted: pd.DataFrame,
                        df_realized: pd.DataFrame,
                        MAKE_games_superadditive=False,
-                       print_warnings=False) -> pd.DataFrame:
+                       print_warnings=False,
+                       MAKE_REALIZED_SUPERADDITIVE=False) -> pd.DataFrame:
     # create output df
     index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
     # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
@@ -428,6 +429,8 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
         # make games superadditive because we want to bid optimally
         if MAKE_games_superadditive:
             v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
+        if MAKE_REALIZED_SUPERADDITIVE:
+            v_realized = make_game_superadditive(v_realized, players, print_warnings=print_warnings)
         # check if convex
         if is_convex_game(v, players):
             df.loc[idx, 'Method'] = 'Shapley'
