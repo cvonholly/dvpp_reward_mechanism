@@ -10,24 +10,22 @@ from src.get_device_systems import get_ADPF #, get_static_pf_varying_ref
 def get_DVPP(IO_dict,
             pi_params,
             dpfs,
-            vref, min_hard_constrains,
+            vref, 
+            min_hard_constrains,
             title='', tlim=(0, 60),
             scales_rating=np.array([]),
-            tol=1e-2,
-            tol_total_dc_gain=1e-4,
             save_path='pics/rewards',
             print_total_energy=False,
             get_peak_power=False,
-            save_plots=True,
             tau_c=1e-4,
             pf_name=False,
             min_service_rating=0.1,
-            n_points=1000,
             price=1,
             save_pics=True,
             adaptive_func={},
-            sum_service_rating=1.0,
-            total_dc_gain=1.0):
+            reference_rating=1.0,
+            total_dc_gain=1.0,
+            debug_grand_coalition=False):
     """
     IO_dict: dict of IO systems with entries: 
         {(name): (ct.tf(...), device_type, rating)} 
@@ -44,6 +42,12 @@ def get_DVPP(IO_dict,
     save_path: for the plots
     price: price of the service in EUR/MW
     """
+    # CONSTANTS
+    # todo: move somewhere else
+    tol = 1.01  # tolerance factor with respect to penalty (i.e.., 1.005 means 0.5% tolerance)
+    tol_total_dc_gain = 1e-4  # tolerance for total dc gain to avoid division by zero
+    n_points = 1000  # number of points for simulation
+
     # scale reference and hard constraints to service rating minus tollerance
     lpf_devices = {k: v[0] for k, v in IO_dict.items() if v[1] == 'lpf'}
     bpf_devices = {k: v[0] for k, v in IO_dict.items() if v[1] == 'bpf'}
@@ -149,7 +153,7 @@ def get_DVPP(IO_dict,
 
     t = np.linspace(tlim[0], tlim[1], n_points)
     x0 = [0, 0]
-    vref = sum_service_rating * vref   # scale by rating
+    vref = reference_rating * vref   # scale by rating
 
     for k, name, G in zip(range(n_devices), names, all_devices):
         # print('Running for device:', name)
@@ -220,32 +224,33 @@ def get_DVPP(IO_dict,
     plant_output = np.sum([responses[n].outputs[0] for n in names], axis=0) if responses[names[0]].outputs.ndim > 1 else np.sum([responses[n].outputs for n in names], axis=0)
 
     # check if unit fulfills test
-    final_rating = sum_service_rating * scales_rating[0]
+    final_rating = reference_rating * scales_rating[0]
     reward = -3 * price * final_rating  # penalty if not fulfilling requirements
-    new_hard_constraints = final_rating * min_hard_constrains
+    new_hard_constraints = final_rating * min_hard_constrains   # set hard constraints for plotting
     for scale in scales_rating:
-        diff = tol + plant_output - scale * sum_service_rating * min_hard_constrains
+        # the difference curve to check if requirements are fulfilled
+        diff = tol * plant_output - scale * reference_rating * min_hard_constrains
         fulfill_requirements = np.all(diff >= 0)
         if fulfill_requirements:
-            reward = sum_service_rating * scale * price
-            final_rating = sum_service_rating * scale
+            reward = reference_rating * scale * price
+            final_rating = reference_rating * scale
             new_hard_constraints = final_rating * min_hard_constrains
         else:
-            # failed the test
+            # failed the scale iteration, final_rating achieved
             break
 
     # check if minimum rating is reached
-    if final_rating < min_service_rating:
+    if final_rating * tol < min_service_rating:
         reward = -3 * price * final_rating  # penalty if not fulfilling requirements
-    
-    # in this case, we have a minimum rating to fulfill
-    if min_service_rating > 0.1:
-        if final_rating < min_service_rating:
-            reward = -3 * price * min_service_rating  # penalty if not fulfilling requirements
-        else:
-            reward = final_rating * price
-
-    if not save_pics:  # do not plot
+        new_hard_constraints = scale * reference_rating * min_hard_constrains  # update for failed service
+        # print where it failed
+        if name_agg=='PV + Wind + BESS':
+            print(f'FAILED: final rating {final_rating:.3f} MW < min service rating {min_service_rating:.3f} MW')
+            print(f'reference_rating: {reference_rating:.3f} MW, scale: {scale:.3f}')
+        
+    # add debugging statement:
+    #   if a) n_devices==3 (grand coalition) and b) reward <=0
+    if not save_pics and (not debug_grand_coalition or n_devices!=3 or reward >= 0):  # do not plot
         return reward, {}, {}
 
     energy_dict = {}  # dictionary for total energy
@@ -265,7 +270,7 @@ def get_DVPP(IO_dict,
     ax.plot(t, plant_output, linewidth=linewidth*1.5, label=f'{name_agg} total output')
 
     for name in names:
-        ax.plot(t, responses[name].outputs[0], linewidth=linewidth, label=f'{name} rated {IO_dict[name][2]:.1f}MW')
+        ax.plot(t, responses[name].outputs[0], linewidth=linewidth, label=f'{name} output') #at {IO_dict[name][2]:.1f}MW')
         color = ax.lines[-1].get_color()
         ax.plot(t, responses[name].outputs[1], '--', linewidth=linewidth, label=f'{name} reference', color=color, alpha=0.5)
 
@@ -299,8 +304,8 @@ def get_DVPP(IO_dict,
     # plt.grid(True)
     # plt.tight_layout()
 
-    if save_plots:
-        fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_")}.png', bbox_inches='tight', dpi=600)
+    if save_pics:
+        fig.savefig(f'{save_path}/{title.replace(" ", "_").replace(".", "_").replace(":00", "_")}.png', bbox_inches='tight', dpi=600)
     plt.close(fig)
 
     return reward, energy_dict, peak_powerd_dict

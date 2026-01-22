@@ -7,7 +7,7 @@ computes time-varying DC gains for Solar PV, Wind Turbine and Battery
 import numpy as np
 import pandas as pd
 
-def get_wind_solar_dc_gains(path='data/data_wind_solar_2024_25.csv',
+def get_probs_and_prices(path='data/data_wind_solar_2024_25.csv',
                             hourly_average=False):
     """
     gets probabilities and prices

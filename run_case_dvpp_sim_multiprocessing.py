@@ -8,12 +8,18 @@ import pandas as pd
 from get_max_reward import simulate_devices_and_limits
 from src.get_controllers import get_pi_params
 from src.get_device_systems import get_bess_energy_sys, get_special_pfs, get_time_constants, get_special_pfs
-from src.time_varying_dc_gain import get_wind_solar_dc_gains, datetime_to_idx
+from src.time_varying_dc_gain import get_probs_and_prices, datetime_to_idx
 from src.get_required_services import *
 from src.game_theory_helpers import powerset_tuple
 from src.get_pv_wind_probs import get_errors, get_prod_forecast_data
 from src.get_optimal_bid import get_optimal_bid
 
+"""
+TODOS
+- split forecasted and realized evaluation more clearly
+- make sure that optimal bid AND corresponding refernece curve are correct
+- make sure that it is not a numeric issue!
+"""
 
 def run_case_dvpp_sim(create_io_dict,
                     save_path='pics/new',
@@ -31,12 +37,11 @@ def run_case_dvpp_sim(create_io_dict,
                     allow_sub_coalitions=False,
                     use_meteoblue=True,
                     HPF_DC_factor=0,
-                    save_files_internally=True # <--- NEW PARAMETER
+                    save_files_internally=True,
+                    debug_grand_coalition=False
                     ):
-
-    # ... [Keep existing setup code exactly as is] ...
     # time series of 15-minute dc gain
-    probs_15_min, prices = get_wind_solar_dc_gains(hourly_average=hourly_average)
+    probs_15_min, prices = get_probs_and_prices(hourly_average=hourly_average)
     wind_solar_dc_gains, wind_solar_forecast = get_prod_forecast_data(use_meteoblue=use_meteoblue)
 
     realized_values = {}
@@ -54,6 +59,7 @@ def run_case_dvpp_sim(create_io_dict,
         else:
             dpfs[name] = ct.tf([1], [time_constants[name], 1])
 
+    # set power factor name
     pf_name = 'SPF' if STATIC_PF else 'DPF'
     pf_name = 'ADPF' if (adaptive_func!={} and STATIC_PF=='ADPF') else pf_name
 
@@ -66,7 +72,8 @@ def run_case_dvpp_sim(create_io_dict,
     multi_index = pd.MultiIndex.from_product([time_stamps, range(K_errors)])
     dvpps_info = {s: pd.DataFrame([], index=multi_index,
                               columns=['time_stamps', 'k_dc_gain', 'real_dc_gain', 'k_bid', 'opt_bid', 
-                                       'k_reward', 'expected_reward', 'real_reward', 'FFR_price', 'FCR-D up_price', 'k_bess_soc']) for s in services_input.keys()}
+                                       'k_reward', 'expected_reward', 'real_reward', 'FFR_price', 'FCR-D up_price', 'k_bess_soc', 
+                                       'k_ref_rating', 'real_ref_rating']) for s in services_input.keys()}
     all_coalitions = powerset_tuple(list(create_io_dict().keys()))
     bids_df = {s: pd.DataFrame([], index=multi_index,
                               columns=all_coalitions, dtype=float) for s in services_input.keys()}
@@ -77,9 +84,11 @@ def run_case_dvpp_sim(create_io_dict,
             if not time_stamps.empty:
                 dvpps_info[s]['FFR_price'] = np.repeat(prices.loc[time_stamps, 'FFR_price'].values, K_errors)
                 dvpps_info[s]['FCR-D up_price'] = np.repeat(prices.loc[time_stamps, 'FCR_D_up_price'].values, K_errors)
+                dvpps_info[s]['time_stamps'] = np.repeat(time_stamps.values, K_errors)
 
     # simulate scenarios
     T = len(time_stamps)
+    coalition_tuples = powerset_tuple(my_names)
     for service, (ts, input, requirement_curve) in services_input.items():
         my_path = save_path + '/' + service.replace('-', '_')
         for i, t in enumerate(time_stamps):
@@ -87,24 +96,24 @@ def run_case_dvpp_sim(create_io_dict,
             
             # preliminary calculations
             price = prices.loc[t, 'FFR_price'] if service=='FFR' else prices.loc[t, 'FCR_D_up_price']
-            if service=='FFR-FCR':
+            if service=='FFR + FCR-D' or service=='FFR-FCR':
                 price = (prices.loc[t, 'FFR_price'] + prices.loc[t, 'FCR_D_up_price']) / 2
             save_pics_i = save_pics(i) if callable(save_pics) else save_pics
-            bids = {coalition: [] for coalition in powerset_tuple(my_names)}  # bids for all coalitions for this scenario
-            bids_to_service_rating = {coalition: {} for coalition in powerset_tuple(my_names)}  # mapping bids to service ratings for all coalitions
+            bids = {coalition: [] for coalition in coalition_tuples}  # bids for all coalitions for this scenario
+            # reference_ratings = {coalition: [] for coalition in coalition_tuples}  # reference ratings for all coalitions
+            bids_to_service_rating = {coalition: {} for coalition in coalition_tuples}  # mapping bids to service ratings for all coalitions
 
             # check if price is zero
             if not price > 0:
                 print(f'Price for service {service} at time {t} is zero, skipping...')
-                # dvpps_info[service].loc[t] = 0
-                # bids_df[service].loc[t] = 0
+                dvpps_info[service].loc[t] = 0
+                bids_df[service].loc[t] = 0
+                realized_values[(service, t)] = {coalition: 0 for coalition in coalition_tuples}
+                expected_values[(service, t)] = {coalition: 0 for coalition in coalition_tuples}
                 continue
 
             # 1. get forecasted values
             wind_fc, solar_fc = wind_solar_forecast.loc[t][['Wind_forecast', 'Solar_forecast']]
-
-            if save_dvpp_info:
-                dvpps_info[service].loc[t, 'time_stamps'] = t
 
             for k, err in enumerate(k_errs[t]):
                 IO_dict = create_io_dict()    # reset io dict for each run
@@ -125,7 +134,7 @@ def run_case_dvpp_sim(create_io_dict,
                 # else:
                 soc = 4   # todo: get from somewhere else
 
-                # service response - forecast
+                # service response - forecast scenario k
                 VALUE, _, reference_rating = simulate_devices_and_limits(
                                             IO_dict=IO_dict,
                                             pi_params=pi_params,
@@ -135,8 +144,8 @@ def run_case_dvpp_sim(create_io_dict,
                                             T_MAX=ts[-1],
                                             save_path=my_path,
                                             pf_name=pf_name,
-                                            x_scenario=i+1,
-                                            price=price,  # specify scenario if needed from 1...Sx,
+                                            time_stamp=t,
+                                            price=price,
                                             dpfs=dpfs,
                                             save_pics=False,
                                             adaptive_func=adaptive_func,
@@ -146,25 +155,27 @@ def run_case_dvpp_sim(create_io_dict,
                 )
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 # append to bids
-                for this_coalition, rs in VALUE.items():
-                    bid = rs / price
-                    bids[this_coalition].append(bid)  # append to bids the acheived price
-                    bids_to_service_rating[this_coalition][bid] = reference_rating[this_coalition]
-                # forecasted_values[(service, i, k)] = VALUE
+                for this_coalition, this_reward in VALUE.items():
+                    bid = this_reward / price  # achieved bid in MW of coalition
+                    bids[this_coalition].append(bid)  # append to all achieved bids
+                    # reference_ratings[this_coalition].append(reference_rating[this_coalition])  # append corresponding service rating
+                    bids_to_service_rating[this_coalition][bid] = reference_rating[this_coalition]  # map bid to service rating (reference trajectory magnitude)
                 if save_dvpp_info:
                     bids_df[service].loc[(t, k)] = [VALUE[c] / price for c in VALUE.keys()]
-                    dvpps_info[service].loc[(t, k), ['k_bid', 'k_dc_gain', 'k_reward', 'k_bess_soc']] = \
-                            [VALUE[idx_grand_coalition]/price, sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc]
+                    dvpps_info[service].loc[(t, k), ['k_bid', 'k_dc_gain', 'k_reward', 'k_bess_soc', 'k_ref_rating']] = \
+                            [VALUE[idx_grand_coalition]/price, sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], soc, reference_rating[idx_grand_coalition]]
 
             # 2. choose optimal bids for all coalition
-            set_service_rating = {}    # reference service value
-            bids_to_submit = {}    # optimal bids which will be submitted for realized value
+            set_service_rating = {}   # reference service magnitudes to be set for real-time operation
+            bids_to_submit = {}       # optimal bids which will be submitted for realized value
             i_expected_rewards = {}   # dictionary with expected rewards for all coalitions
-            probs = [1/K_errors for _ in range(K_errors)]
+            probs = [1/K_errors for _ in range(K_errors)]   # uniform probabilities over all forecast errors
             for coalition in bids.keys():
-                c_bids = bids[coalition]
-                b_star_coalition, value_wo_price, gamma = get_optimal_bid(c_bids, probs, return_reward=True)
+                c_bids = bids[coalition]  # get all bids for this coalition
+                b_star_coalition, value_wo_price, gamma = get_optimal_bid(c_bids, probs, return_reward=True)   # compute optimal bid
+                # set optimal bid and associated service rating
                 set_service_rating[coalition] = bids_to_service_rating[coalition][b_star_coalition] if b_star_coalition in bids_to_service_rating[coalition] else 0
+                # set_service_rating[coalition] = reference_rating_optimal
                 bids_to_submit[coalition] = b_star_coalition
                 i_expected_rewards[coalition] = value_wo_price * price     # expected value game
                 # if grand coalition, add to dvpp info
@@ -172,57 +183,49 @@ def run_case_dvpp_sim(create_io_dict,
                     dvpps_info[service].loc[t, 'expected_reward'] = value_wo_price * price
             expected_values[(service, t)] = i_expected_rewards
 
-
             # 3. stage: real-time operation
             IO_dict = create_io_dict()    # reset io dict for each service
             if change_roles_for_services:
                 for name, new_type in change_roles_for_services.get(service, {}).items():
                     IO_dict[name] = (IO_dict[name][0], new_type, IO_dict[name][2])
 
-            # get realized values
+            # get realized MW of renewables
             dc_gain_Wind = wind_solar_dc_gains['Wind'].loc[t] * power_ratings_dict['Wind']
             dc_gain_PV = wind_solar_dc_gains['Solar'].loc[t] * power_ratings_dict['PV']
             # adjust current io_dict
             IO_dict['Wind'] = (IO_dict['Wind'][0], IO_dict['Wind'][1], dc_gain_Wind)
             IO_dict['PV'] = (IO_dict['PV'][0], IO_dict['PV'][1], dc_gain_PV)
-            # df_bat = pd.read_csv('data/battery_soc_profile.csv', parse_dates=['DateTime'], index_col='DateTime')
-            # if include_limited_bess:
-            #     # get battery SoC for time
-            #     idx_bat = datetime_to_idx(time_stamps[i])
-            #     soc = df_bat.loc[idx_bat, 'Battery_SOC (MWh)']
-            #     IO_dict['BESS'] = (get_bess_energy_sys(e_max=soc), IO_dict['BESS'][1], IO_dict['BESS'][2])
-
-            # if we have 2. stage, we have to follow the bid we have made
-            bids_lower_bound = {key: b for key, b in bids_to_submit.items()} 
 
             # service response - real
-            VALUE, _, _ = simulate_devices_and_limits(
+            #   two parameters change in the execution:
+            #   - set_service_rating: the reference trajectory magnitudes to be used
+            #   - bids_to_submit: the bids to be submitted for the service
+            VALUE, _, real_ref_rating = simulate_devices_and_limits(
                                         IO_dict=IO_dict,
                                         pi_params=pi_params,
                                         input_service_max=input,
                                         curve_service_min=requirement_curve,
                                         title=f'{service}',
+                                        set_service_rating=set_service_rating,     # set the reference trajectory magnitudes
+                                        bid_received=bids_to_submit,               # set the submitted bids
                                         T_MAX=ts[-1],
                                         save_path=my_path,
                                         pf_name=pf_name,
-                                        x_scenario=i+1,
-                                        price=price,  # specify scenario if needed from 1...Sx,
+                                        time_stamp=t,
+                                        price=price,
                                         dpfs=dpfs,
                                         save_pics=save_pics_i,
                                         adaptive_func=adaptive_func,
                                         service=service,
-                                        set_service_rating=set_service_rating,
-                                        bid_received=bids_lower_bound,
                                         set_special_ratings=set_special_ratings.get(service, {}),
-                                        HPF_DC_factor=HPF_DC_factor
+                                        HPF_DC_factor=HPF_DC_factor,
+                                        debug_grand_coalition=debug_grand_coalition
             )
             realized_values[(service, t)] = VALUE
             if save_dvpp_info:
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
-                dvpps_info[service].loc[t, ['real_dc_gain', 'real_reward', 'opt_bid']] = \
-                        [sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], bids_lower_bound[idx_grand_coalition]]
-            
-    # --- MODIFIED RETURN SECTION ---
+                dvpps_info[service].loc[t, ['real_dc_gain', 'real_reward', 'opt_bid', 'real_ref_rating']] = \
+                        [sum(IO_dict[k][2] for k in IO_dict.keys()), VALUE[idx_grand_coalition], bids_to_submit[idx_grand_coalition], real_ref_rating[idx_grand_coalition]]
     
     # Only save to CSV if explicitly requested (usually False for parallel workers)
     if save_files_internally:

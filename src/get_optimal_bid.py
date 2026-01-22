@@ -57,16 +57,11 @@ def get_optimal_bid(bids, ps,
     # Get the optimal bid and reward from our discrete set
     b_opt = candidate_bids[best_index]
     reward = rewards[best_index]
-
-    # --- START: NEW CALCULATION ---
-    
+        
     # Calculate gamma: sum of probabilities where b_k >= b_opt
     gamma = np.sum(ps[bids >= b_opt])
-    
-    # --- END: NEW CALCULATION ---
 
     if return_reward:
-        # --- MODIFIED RETURN ---
         return b_opt, reward, gamma
 
     return b_opt

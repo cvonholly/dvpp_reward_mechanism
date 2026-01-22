@@ -191,7 +191,7 @@ def run_case_dvpp_sim(create_io_dict,
                                             T_MAX=ts[-1],
                                             save_path=my_path,
                                             pf_name=pf_name,
-                                            x_scenario=i+1,
+                                            time_stamp=t,
                                             price=price,  # specify scenario if needed from 1...Sx,
                                             dpfs=dpfs,
                                             save_pics=False,
@@ -226,7 +226,7 @@ def run_case_dvpp_sim(create_io_dict,
                 # if grand coalition, add to dvpp info
                 if save_dvpp_info and len(coalition)==len(my_names):
                     dvpps_info[service].loc[t, 'expected_reward'] = value_wo_price * price
-            expected_values[(service, i)] = i_expected_rewards
+            expected_values[(service, t)] = i_expected_rewards
 
 
             # 3. stage: real-time operation
@@ -261,7 +261,7 @@ def run_case_dvpp_sim(create_io_dict,
                                         T_MAX=ts[-1],
                                         save_path=my_path,
                                         pf_name=pf_name,
-                                        x_scenario=i+1,
+                                        time_stamp=t,
                                         price=price,  # specify scenario if needed from 1...Sx,
                                         dpfs=dpfs,
                                         save_pics=save_pics_i,
@@ -272,7 +272,7 @@ def run_case_dvpp_sim(create_io_dict,
                                         set_special_ratings=set_special_ratings.get(service, {}),
                                         HPF_DC_factor=HPF_DC_factor
             )
-            realized_values[(service, i)] = VALUE
+            realized_values[(service, t)] = VALUE
             if save_dvpp_info:
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 dvpps_info[service].loc[t, ['real_dc_gain', 'real_reward', 'opt_bid']] = \
