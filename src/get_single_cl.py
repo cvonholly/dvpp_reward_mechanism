@@ -139,5 +139,7 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
 
     if save_plots:
         plt.savefig(f'{save_path}/{title.replace(" ", "_")}.png')
+    
+    plt.close()
 
     return reward, energy_dict, peak_powerd_dict
