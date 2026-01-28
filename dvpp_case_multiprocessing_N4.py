@@ -2,6 +2,7 @@ import pandas as pd
 import multiprocessing
 import os
 from functools import partial
+import matplotlib.pyplot as plt
 
 # Import your custom modules
 from src.get_required_services import get_fcr_d, get_ffr_fcr, get_ffr_fcr_d
@@ -9,26 +10,47 @@ from run_case_dvpp_sim_multiprocessing import run_case_dvpp_sim
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
 # --- Configuration Constants (Must be Global) ---
-start_date = pd.to_datetime('2025-04-06 00:00:00')
-end_date = pd.to_datetime('2025-04-12 23:59:59')
-# start_date = pd.to_datetime('2025-06-02 00:00:00')
-# end_date = pd.to_datetime('2025-06-08 23:00:00')
-SAVE_PICS = False   # default: False
-NUMB_WORKERS = 14 # 21  # number of parallel processes
+start_date = pd.to_datetime('2025-04-12 10:00:00')
+end_date = pd.to_datetime('2025-04-12 11:59:59')
+SAVE_PICS = True   # default: False
+NUMB_WORKERS = 2 # 21  # number of parallel processes
 N_HOURS_TOTAL = (end_date - start_date).days * 24 + (end_date - start_date).seconds // 3600 + 1
 HOUR_CHUNKS = N_HOURS_TOTAL // NUMB_WORKERS   # number of hours per worker
-save_path = 'pics/mp_ilmar_spring/'
+save_path = 'pics/v_N4/'
 input_service = {'FFR + FCR-D': get_ffr_fcr_d()}   # dict of services to provide
-K_errors = 10      # default: 25  # number of scenarios for the uncertainty
+K_errors = 3      # default: 25  # number of scenarios for the uncertainty
 REL = .1           # scaling factor for device ratings; i.e. 10% of real Ilmar power plant
 HPF_DC_FACTOR = .25
 WIND_CAP = 216 * REL
 SOLAR_CAP = 150 * REL
-BATTERY_CAP = 25 * REL   # real Ilmar power plant params
-# BATTERY_CAP = 150 * REL   # scaled up battery for better performance
+# BATTERY_CAP = 25 * REL   # real Ilmar power plant params
+BATTERY_CAP = 150 * REL   # scaled up battery for better performance
 BATTERY_ENERGY = BATTERY_CAP * HPF_DC_FACTOR * 4
+# new
+SUPERCAP_CAP = 50 * REL
+SUPERCAP_ENERGY = 50 * REL * 4
 
-debug_grand_coalition = False   # save pictures of grand coalition failing to meet service
+debug_grand_coalition = True   # save pictures of grand coalition failing to meet service
+
+FONT_SIZE = 18
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX to write text
+    "font.family": "serif",
+    "font.serif": ["Times"], # Use a serif font (LaTeX will substitute the right one)
+    
+    # 2. MATCH YOUR DOCUMENT PREAMBLE HERE
+    # Use the same packages you use in your main document.
+    # 'newtxtext,newtxmath' is the modern choice.
+    # Use 'mathptmx' if your paper uses that instead.
+    "text.latex.preamble": r"\usepackage{newtxtext,newtxmath}", 
+    
+    # Optional: Match the font size to your document (usually 10pt for IEEE)
+    "font.size": FONT_SIZE,
+    "axes.labelsize": FONT_SIZE,
+    "legend.fontsize": FONT_SIZE,
+    "xtick.labelsize": FONT_SIZE,
+    "ytick.labelsize": FONT_SIZE,
+})
 
 
 # save these configuration constants into save_path for recrod keeping
@@ -41,6 +63,8 @@ config_constants = {
     'SOLAR_CAP': SOLAR_CAP,
     'BATTERY_CAP': BATTERY_CAP,
     'BATTERY_ENERGY': BATTERY_ENERGY,
+    'SUPERCAP_CAP': BATTERY_CAP,
+    'SUPERCAP_ENERGY': SUPERCAP_ENERGY,
     'HPF_DC_FACTOR': HPF_DC_FACTOR,
     'debug_grand_coalition': debug_grand_coalition
 }
@@ -50,7 +74,8 @@ def get_io_dict():
     return {
         'PV': (get_pv_sys(), 'lpf', SOLAR_CAP),
         'Wind': (get_wind_sys(), 'lpf', WIND_CAP),
-        'BESS': (get_bess_energy_sys(e_max=BATTERY_ENERGY), 'hpf', BATTERY_CAP),
+        'BESS': (get_bess_energy_sys(e_max=BATTERY_ENERGY), 'bpf', BATTERY_CAP),
+        'SC': (get_bess_energy_sys(e_max=SUPERCAP_ENERGY), 'hpf', SUPERCAP_CAP),
     }
 
 def run_simulation_chunk(time_chunk, common_kwargs):

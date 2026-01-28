@@ -2,6 +2,7 @@ import pandas as pd
 import multiprocessing
 import os
 from functools import partial
+import matplotlib.pyplot as plt
 
 # Import your custom modules
 from src.get_required_services import get_fcr_d, get_ffr_fcr, get_ffr_fcr_d
@@ -15,17 +16,37 @@ SAVE_PICS = True   # default: False
 NUMB_WORKERS = 2 # 21  # number of parallel processes
 N_HOURS_TOTAL = (end_date - start_date).days * 24 + (end_date - start_date).seconds // 3600 + 1
 HOUR_CHUNKS = N_HOURS_TOTAL // NUMB_WORKERS   # number of hours per worker
-save_path = 'pics/v_TESTING2/'
+save_path = 'pics/v_TESTING/'
 input_service = {'FFR + FCR-D': get_ffr_fcr_d()}   # dict of services to provide
-K_errors = 25      # default: 25  # number of scenarios for the uncertainty
+K_errors = 5      # default: 25  # number of scenarios for the uncertainty
+HPF_DC_FACTOR = .25
 REL = .1           # scaling factor for device ratings; i.e. 10% of real Ilmar power plant
 WIND_CAP = 216 * REL
 SOLAR_CAP = 150 * REL
 # BATTERY_CAP = 25 * REL   # real Ilmar power plant params
 BATTERY_CAP = 150 * REL   # scaled up battery for better performance
-BATTERY_ENERGY = 50 * REL * 3600
-HPF_DC_FACTOR = .25
+BATTERY_ENERGY = BATTERY_CAP * HPF_DC_FACTOR * 4
 debug_grand_coalition = True   # save pictures of grand coalition failing to meet service
+
+FONT_SIZE = 18
+plt.rcParams.update({
+    "text.usetex": True,  # Use LaTeX to write text
+    "font.family": "serif",
+    "font.serif": ["Times"], # Use a serif font (LaTeX will substitute the right one)
+    
+    # 2. MATCH YOUR DOCUMENT PREAMBLE HERE
+    # Use the same packages you use in your main document.
+    # 'newtxtext,newtxmath' is the modern choice.
+    # Use 'mathptmx' if your paper uses that instead.
+    "text.latex.preamble": r"\usepackage{newtxtext,newtxmath}", 
+    
+    # Optional: Match the font size to your document (usually 10pt for IEEE)
+    "font.size": FONT_SIZE,
+    "axes.labelsize": FONT_SIZE,
+    "legend.fontsize": FONT_SIZE,
+    "xtick.labelsize": FONT_SIZE,
+    "ytick.labelsize": FONT_SIZE,
+})
 
 
 # save these configuration constants into save_path for recrod keeping
