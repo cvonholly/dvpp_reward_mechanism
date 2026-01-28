@@ -134,10 +134,10 @@ def simulate_devices_and_limits(IO_dict: dict,
             else:
                 # reference_rating is the rating we want to provide
                 min_rating_i = bid_received[subset]  # minimum bid to achieve
-                # reference_rating = set_service_rating[subset] or lpf_dc_gain  # reference rating
+                reference_rating = set_service_rating[subset]   # or lpf_dc_gain  # reference rating
                 # new method: take max of set service rating and lpf dc gain
                 #     reasoning: if lpf_dc_gain too low, the refernce would be too low. However, sometimes set_service_rating[subset] is also too low, so choose max of both
-                reference_rating = max(set_service_rating[subset], lpf_dc_gain)
+                # reference_rating = max(set_service_rating[subset], lpf_dc_gain)
                 
             sub_title = f'{title} {"+".join(subset)}'
             if time_stamp is not None:

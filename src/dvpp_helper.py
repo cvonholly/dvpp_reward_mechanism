@@ -257,22 +257,23 @@ def get_DVPP(IO_dict,
     peak_powerd_dict = {}   # dictionary for peak power
 
     # set font size
-    linewidth = 3
+    linewidth = 3.25
 
     # Plot results (refactored to fig, ax)
-    fig, ax = plt.subplots(figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(10, 4))
+    tab10_colors = plt.cm.tab10.colors
 
-    ax.plot(t, vref, 'b--', label='Reference', linewidth=linewidth)
+    ax.plot(t, vref, color='darkorange', label='Reference', linewidth=linewidth)
 
-    ax.plot(t, new_hard_constraints, '*', color='red', markersize=1, linewidth=linewidth)
+    # ax.plot(t, new_hard_constraints, '*', color='red', markersize=1, linewidth=linewidth)
     ax.fill_between(t, 0, new_hard_constraints, color='red', alpha=0.1, label='Penalty Region')
 
-    ax.plot(t, plant_output, linewidth=linewidth*1.5, label=f'{name_agg} total output')
+    ax.plot(t, plant_output, linewidth=linewidth, label=f'{name_agg} total output', linestyle='--')
 
     for name in names:
-        ax.plot(t, responses[name].outputs[0], linewidth=linewidth, label=f'{name} output') #at {IO_dict[name][2]:.1f}MW')
+        ax.plot(t, responses[name].outputs[0], '--', linewidth=linewidth, label=f'{name} output') #at {IO_dict[name][2]:.1f}MW')
         color = ax.lines[-1].get_color()
-        ax.plot(t, responses[name].outputs[1], '--', linewidth=linewidth, label=f'{name} reference', color=color, alpha=0.5)
+        ax.plot(t, responses[name].outputs[1], linewidth=linewidth, label=f'{name} reference', color=color, alpha=0.5, zorder=10)
 
         if print_total_energy:
             energy = np.trapz(responses[name].outputs[0], x=t)
@@ -285,16 +286,18 @@ def get_DVPP(IO_dict,
 
             print('========================================')
 
-    final_title = title.replace('FFR + FCR-D', r'$\mathrm{FFR + FCR-D^{up}}$') + f', Reward: {reward:.1f}€'
+    final_title = title.replace('FFR + FCR-D', r'$\text{FFR + FCR-D}^\text{up}$') # + f', Reward: {reward:.1f}€'
     ax.set_title(final_title)
-    ax.grid(True)
+    ax.grid(True, linestyle=':', alpha=0.6, zorder=-10)
     ax.set_xlabel('time (s)')
     ax.set_ylabel('active power (MW)')
-    ax.set_xlim(tlim)
+    # todo set me back
+    # ax.set_xlim(tlim)
+    ax.set_xlim((0, 45))
 
     # place legend outside top-right
     fig.subplots_adjust(right=0.80)
-    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1.0))
+    ax.legend(loc='upper left', bbox_to_anchor=(1.02, 1.07))
 
     # plt.subplot(2, 1, 2)
     # plt.xlabel('Time [s]')
