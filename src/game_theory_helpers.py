@@ -405,17 +405,59 @@ def solve_optimal_partition(v):
 
 def evaluate_full_game(df_forecasted: pd.DataFrame,
                        df_realized: pd.DataFrame,
-                       MAKE_games_superadditive=False,
+                       MAKE_GAMES_SUPERADD=False,
+                       USE_SUB_GAME_METHOD=True,
                        print_warnings=False,
-                       MAKE_REALIZED_SUPERADDITIVE=False) -> pd.DataFrame:
+                       MAKE_REALIZED_SUPERADDITIVE=False,
+                       SPLIT_FORECASTED_REALIZED=False) -> pd.DataFrame:
+    """
+    Evaluate full game for forecasted and realized values.
+
+    Inputs:
+    - df_forecasted: DataFrame with forecasted values for each coalition
+    - df_realized: DataFrame with realized values for each coalition
+    - (optional) MAKE_GAMES_SUPERADD: Whether to adjust games to be superadditive
+    - (optional) USE_SUB_GAME_METHOD: Whether to use sub-game method when others fail
+    - (optional) print_warnings: Whether to print warnings during processing
+    - (optional) MAKE_REALIZED_SUPERADDITIVE: Whether to adjust realized game to be superadditive
+    - (optional) SPLIT_FORECASTED_REALIZED: Evaluate forecasted and realized game separately
+    Outputs:
+    - df: DataFrame with rewards allocated to each player for forecasted and realized values
+        - df.index: MultiIndex with levels [Time Index, 'Forecasted'/'Realized', 'Value'/'Reward']
+        - df.columns: Player columns + ['F-Game Type', 'R-Game Type']
+            where 'F-Game Type' indicates the type of forecasted game
+            and 'R-Game Type' indicates the type of realized game
+    - df_forecasted: DataFrame with forecasted values for each coalition
+        (may be changed due to superadditive & other parameter adjustments)
+    - df_realized: DataFrame with realized values for each coalition
+        (may be changed due to superadditive & other parameter adjustments)
+    """
     # create output df
     index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
     # Method can be: ['Shapley', 'Nucleolus', 'Sub-Game']
     player_cols = [c for c in df_forecasted.columns if len(c)==1]  # devices cols
     players = [c[0] for c in df_forecasted.columns if len(c)==1]  # devices
-    columns = players + ['Method', 'Method-Realized']
+    columns = players + ['F-Game Type', 'R-Game Type']
     df = pd.DataFrame(pd.NA, index=index, columns=columns)  # all coalition
-    
+
+    # first check: superadditivity
+    df_forecasted_new = pd.DataFrame(0.0, index=df_forecasted.index, columns=df_forecasted.columns, dtype=float)
+    df_realized_new = pd.DataFrame(0.0, index=df_realized.index, columns=df_realized.columns)
+    map_set_to_tuple = {frozenset(c): c for c in df_forecasted.columns}
+    if MAKE_GAMES_SUPERADD:
+        for idx, row in df_forecasted.iterrows():
+            v = {frozenset(k): val for k, val in row.items()}  # create value function
+            v[frozenset()] = 0
+            v_realized = {frozenset(k): val for k, val in df_realized.loc[idx].items()}  # create value function
+            v_realized[frozenset()] = 0
+            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
+            for coalition, val in v.items():
+                if len(coalition)==0:  continue
+                df_forecasted_new.loc[idx, (map_set_to_tuple[coalition],)] = val
+                df_realized_new.loc[idx, (map_set_to_tuple[coalition],)] = v_realized[coalition]
+        df_forecasted = df_forecasted_new
+        df_realized = df_realized_new
+        
     for idx, row in df_forecasted.iterrows():
         realized_row = df_realized.loc[idx]
         idx = idx[1]  # adjust index
@@ -427,20 +469,24 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
         v_realized = {frozenset(k): val for k, val in realized_row.items()}  # create value function
         v_realized[frozenset()] = 0
         # make games superadditive because we want to bid optimally
-        if MAKE_games_superadditive:
-            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
-        if MAKE_REALIZED_SUPERADDITIVE:
-            v_realized = make_game_superadditive(v_realized, players, print_warnings=print_warnings)
+        # if MAKE_GAMES_SUPERADD:
+        #     v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
+        # if MAKE_REALIZED_SUPERADDITIVE:
+        #     v_realized = make_game_superadditive(v_realized, players, print_warnings=print_warnings)
+        # 
+        # default proces: handle forecasted and realized games together
         # check if convex
         if is_convex_game(v, players):
-            df.loc[idx, 'Method'] = 'Shapley'
+            df.loc[idx, 'F-Game Type'] = 'Shapley'
             shapley = get_shapley_value(v, players)
             df.loc[(idx, 'Forecasted', 'Reward'), list(shapley.keys())] = list(shapley.values())
             shapley = get_shapley_value(v_realized, players)
             df.loc[(idx, 'Realized', 'Reward'), list(shapley.keys())] = list(shapley.values())
         # elif check if core non-empty or superadditive
-        elif game_is_superadditive(v, players) or core_nonempty(v, players):
-            df.loc[idx, 'Method'] = 'Nucleolus'
+        # todo
+        # elif game_is_superadditive(v, players) or core_nonempty(v, players):
+        elif core_nonempty(v, players):
+            df.loc[idx, 'F-Game Type'] = 'Nucleolus'
             # get nucleolus
             nucleolus = get_nucleolus(v, players)
             df.loc[(idx, 'Forecasted', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
@@ -448,38 +494,55 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
             nucleolus = get_least_core_nucleolus(v_realized, players)
             df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
         else:
-            df.loc[idx, 'Method'] = 'Sub-Game'
-            # form sub-games
-            max_value, coalitions = solve_optimal_partition(v)
-            for coalition in coalitions:
-                # iterate over coalitions and compute optimal value
-                sub_game_value = v[coalition]
-                if len(coalition) == 1:
-                    # if single device, just assign its value
-                    df.loc[(idx, 'Forecasted', 'Reward'), tuple(coalition)[0]] = sub_game_value
-                    df.loc[(idx, 'Realized', 'Reward'), tuple(coalition)[0]] = v_realized[coalition]
-                else:
-                    v_subgame = {k: val for k, val in v.items() if k.issubset(coalition)}
-                    v_subgame[frozenset()] = 0
-                    if is_convex_game(v_subgame, list(coalition)):
-                        shapley_sub = get_shapley_value(v_subgame, list(coalition))
-                        for p, val in shapley_sub.items():
-                            df.loc[(idx, 'Forecasted', 'Reward'), p] = val
-                        shapley_sub = get_shapley_value({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
-                        for p, val in shapley_sub.items(): 
-                            df.loc[(idx, 'Realized', 'Reward'), p] = val
+            if USE_SUB_GAME_METHOD:
+                df.loc[idx, 'F-Game Type'] = 'Sub-Game'
+                # form sub-games
+                max_value, coalitions = solve_optimal_partition(v)
+                for coalition in coalitions:
+                    # iterate over coalitions and compute optimal value
+                    sub_game_value = v[coalition]
+                    if len(coalition) == 1:
+                        # if single device, just assign its value
+                        df.loc[(idx, 'Forecasted', 'Reward'), tuple(coalition)[0]] = sub_game_value
+                        df.loc[(idx, 'Realized', 'Reward'), tuple(coalition)[0]] = v_realized[coalition]
                     else:
-                        nucleolus_sub = get_nucleolus(v_subgame, list(coalition))
-                        for p, val in nucleolus_sub.items():
-                            df.loc[(idx, 'Forecasted', 'Reward'), p] = val
-                        nucleolus_sub = get_least_core_nucleolus({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
-                        for p, val in nucleolus_sub.items(): 
-                            df.loc[(idx, 'Realized', 'Reward'), p] = val
+                        v_subgame = {k: val for k, val in v.items() if k.issubset(coalition)}
+                        v_subgame[frozenset()] = 0
+                        if is_convex_game(v_subgame, list(coalition)):
+                            shapley_sub = get_shapley_value(v_subgame, list(coalition))
+                            for p, val in shapley_sub.items():
+                                df.loc[(idx, 'Forecasted', 'Reward'), p] = val
+                            shapley_sub = get_shapley_value({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
+                            for p, val in shapley_sub.items(): 
+                                df.loc[(idx, 'Realized', 'Reward'), p] = val
+                        else:
+                            nucleolus_sub = get_nucleolus(v_subgame, list(coalition))
+                            for p, val in nucleolus_sub.items():
+                                df.loc[(idx, 'Forecasted', 'Reward'), p] = val
+                            nucleolus_sub = get_least_core_nucleolus({k: val for k, val in v_realized.items() if k.issubset(coalition)}, list(coalition))
+                            for p, val in nucleolus_sub.items(): 
+                                df.loc[(idx, 'Realized', 'Reward'), p] = val
+            else:
+                df.loc[idx, 'F-Game Type'] = 'Nucleolus (Core Empty)'
+                nucleolus = get_least_core_nucleolus(v, players)
+                df.loc[(idx, 'Forecasted', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+                nucleolus = get_least_core_nucleolus(v_realized, players)
+                df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+        
         # also calculated realized game Shapley / Nucleolus / Sub-Game
         if is_convex_game(v_realized, players):
-            df.loc[idx, 'Method-Realized'] = 'Shapley'
+            df.loc[idx, 'R-Game Type'] = 'Shapley'
+            if SPLIT_FORECASTED_REALIZED:
+                shapley = get_shapley_value(v_realized, players)
+                df.loc[(idx, 'Realized', 'Reward'), list(shapley.keys())] = list(shapley.values())
         elif game_is_superadditive(v_realized, players) or core_nonempty(v_realized, players):
-            df.loc[idx, 'Method-Realized'] = 'Nucleolus'
+            df.loc[idx, 'R-Game Type'] = 'Nucleolus'
+            if SPLIT_FORECASTED_REALIZED:
+                nucleolus = get_nucleolus(v_realized, players)
+                df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
         else:
-            df.loc[idx, 'Method-Realized'] = 'Sub-Game'
-    return df
+            df.loc[idx, 'R-Game Type'] = 'Sub-Game'
+            if SPLIT_FORECASTED_REALIZED:
+                nucleolus = get_least_core_nucleolus(v_realized, players)
+                df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+    return df, df_forecasted, df_realized

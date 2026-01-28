@@ -14,19 +14,20 @@ end_date = pd.to_datetime('2025-04-12 23:59:59')
 # start_date = pd.to_datetime('2025-06-02 00:00:00')
 # end_date = pd.to_datetime('2025-06-08 23:00:00')
 SAVE_PICS = False   # default: False
-NUMB_WORKERS = 12 # 21  # number of parallel processes
+NUMB_WORKERS = 14 # 21  # number of parallel processes
 N_HOURS_TOTAL = (end_date - start_date).days * 24 + (end_date - start_date).seconds // 3600 + 1
 HOUR_CHUNKS = N_HOURS_TOTAL // NUMB_WORKERS   # number of hours per worker
-save_path = 'pics/mp_optimal_spring_v2/'
+save_path = 'pics/mp_ilmar_spring/'
 input_service = {'FFR + FCR-D': get_ffr_fcr_d()}   # dict of services to provide
 K_errors = 10      # default: 25  # number of scenarios for the uncertainty
 REL = .1           # scaling factor for device ratings; i.e. 10% of real Ilmar power plant
+HPF_DC_FACTOR = .25
 WIND_CAP = 216 * REL
 SOLAR_CAP = 150 * REL
-# BATTERY_CAP = 25 * REL   # real Ilmar power plant params
-BATTERY_CAP = 150 * REL   # scaled up battery for better performance
-BATTERY_ENERGY = 50 * REL * 3600
-HPF_DC_FACTOR = .25
+BATTERY_CAP = 25 * REL   # real Ilmar power plant params
+# BATTERY_CAP = 150 * REL   # scaled up battery for better performance
+BATTERY_ENERGY = BATTERY_CAP * HPF_DC_FACTOR * 4
+
 debug_grand_coalition = False   # save pictures of grand coalition failing to meet service
 
 
