@@ -38,7 +38,8 @@ def run_case_dvpp_sim(create_io_dict,
                     use_meteoblue=True,
                     HPF_DC_factor=0,
                     save_files_internally=True,
-                    debug_grand_coalition=False
+                    debug_grand_coalition=False,
+                    SANCTION_PRICE=3
                     ):
     # time series of 15-minute dc gain
     probs_15_min, prices = get_probs_and_prices(hourly_average=hourly_average)
@@ -151,7 +152,8 @@ def run_case_dvpp_sim(create_io_dict,
                                             adaptive_func=adaptive_func,
                                             service=service,
                                             set_special_ratings=set_special_ratings.get(service, {},),
-                                            HPF_DC_factor=HPF_DC_factor
+                                            HPF_DC_factor=HPF_DC_factor,
+                                            SANCTION_PRICE=SANCTION_PRICE
                 )
                 idx_grand_coalition = [k for k in VALUE.keys() if len(k)==len(my_names)][0]
                 # append to bids
@@ -172,7 +174,7 @@ def run_case_dvpp_sim(create_io_dict,
             probs = [1/K_errors for _ in range(K_errors)]   # uniform probabilities over all forecast errors
             for coalition in bids.keys():
                 c_bids = bids[coalition]  # get all bids for this coalition
-                b_star_coalition, value_wo_price, gamma = get_optimal_bid(c_bids, probs, return_reward=True)   # compute optimal bid
+                b_star_coalition, value_wo_price, gamma = get_optimal_bid(c_bids, probs, return_reward=True, SANCTION_PRICE=SANCTION_PRICE)   # compute optimal bid
                 # set optimal bid and associated service rating
                 set_service_rating[coalition] = bids_to_service_rating[coalition][b_star_coalition] if b_star_coalition in bids_to_service_rating[coalition] else 0
                 # set_service_rating[coalition] = reference_rating_optimal
@@ -219,7 +221,8 @@ def run_case_dvpp_sim(create_io_dict,
                                         service=service,
                                         set_special_ratings=set_special_ratings.get(service, {}),
                                         HPF_DC_factor=HPF_DC_factor,
-                                        debug_grand_coalition=debug_grand_coalition
+                                        debug_grand_coalition=debug_grand_coalition,
+                                        SANCTION_PRICE=SANCTION_PRICE
             )
             realized_values[(service, t)] = VALUE
             if save_dvpp_info:

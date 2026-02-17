@@ -15,7 +15,8 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
                          min_service_rating=.1,
                          price=1,
                          save_pics=True,
-                         adaptive_func={}):
+                         adaptive_func={},
+                         SANCTION_PRICE=3):
     """
     gets the maximum the power plant can output and outputs the result
 
@@ -50,7 +51,7 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
     
     # check if unit fulfills test
     final_rating = scales_rating[0] * service_rating
-    reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+    reward = -SANCTION_PRICE * price * final_rating  # penalty if not fulfilling requirements
     new_hard_constraints = final_rating * min_hard_constrains
     for scale in scales_rating:
         diff = tol + plant_output - scale * service_rating * min_hard_constrains
@@ -65,12 +66,12 @@ def get_single_cl(closed_loop: ct.TransferFunction, vref, min_hard_constrains,
     
     # check if minimum rating is reached
     if final_rating < min_service_rating:
-        reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+        reward = -SANCTION_PRICE * price * final_rating  # penalty if not fulfilling requirements
 
     # in this case, we have a minimum rating to fulfill
     if min_service_rating > 0.1:
         if final_rating < min_service_rating:
-            reward = -3 * price * min_service_rating  # penalty if not fulfilling requirements
+            reward = -SANCTION_PRICE * price * min_service_rating  # penalty if not fulfilling requirements
         else:
             reward = final_rating * price
 

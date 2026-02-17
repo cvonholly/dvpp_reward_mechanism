@@ -93,7 +93,8 @@ def nucleolusFullDetail(N, charFun, verbose: bool=False):
 
     return nucl, frozen, thetas
 
-def get_nucleolus(v, players):
+def get_nucleolus(v, players,
+                  DEBUG=False) -> dict:
     """
     v: v = {frozenset(k): value, ...} where k is a tuple of players in the coalition
     players: list of players
@@ -105,6 +106,8 @@ def get_nucleolus(v, players):
         return v.get(frozenset(S))
     
     nucl, frozen, thetas = nucleolusFullDetail(players, charFun)
+    if DEBUG:
+        return nucl, frozen, thetas
     return nucl
 
 def get_cdf_sections(outcomes, probabilities=None):

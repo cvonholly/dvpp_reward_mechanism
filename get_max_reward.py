@@ -49,7 +49,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                               print_debugging=False,
                               set_special_ratings={},
                               HPF_DC_factor=0,
-                              debug_grand_coalition=False
+                              debug_grand_coalition=False,
+                              SANCTION_PRICE=3
                             ):
     """
     IO_dict: dict of IO systems with entries: 
@@ -149,11 +150,11 @@ def simulate_devices_and_limits(IO_dict: dict,
                 reward, energy_dict, get_peak_power = 0, {}, 0
             elif reference_rating < rating_threshold:
                 if print_debugging: print(f'Skipping {subset} due to low setpoint {reference_rating:.3f} MW < {rating_threshold} MW')
-                reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
+                reward, energy_dict, get_peak_power = -SANCTION_PRICE * price * min_rating_i, {}, 0
             elif all_devices_dc_gain < min_rating_i:
                 # here, the dvpp will fail for sure, no simulation needed
                 if print_debugging: print(f'Skipping {subset} due to low all dc gain {all_devices_dc_gain:.3f} MW < {min_rating_i} MW')
-                reward, energy_dict, get_peak_power = -3 * price * min_rating_i, {}, 0
+                reward, energy_dict, get_peak_power = -SANCTION_PRICE * price * min_rating_i, {}, 0
             else:
                 reward, energy_dict, get_peak_power = get_DVPP(
                                 IO_dict=subset_io_dict,
@@ -173,7 +174,8 @@ def simulate_devices_and_limits(IO_dict: dict,
                                 reference_rating=reference_rating,
                                 total_dc_gain=lpf_dc_gain,
                                 min_service_rating=min_rating_i,
-                                debug_grand_coalition=debug_grand_coalition
+                                debug_grand_coalition=debug_grand_coalition,
+                                SANCTION_PRICE=SANCTION_PRICE
                                 )
 
             VALUE[subset] = reward
