@@ -25,7 +25,8 @@ def get_DVPP(IO_dict,
             adaptive_func={},
             reference_rating=1.0,
             total_dc_gain=1.0,
-            debug_grand_coalition=False):
+            debug_grand_coalition=False,
+            SANCTION_PRICE=3):
     """
     IO_dict: dict of IO systems with entries: 
         {(name): (ct.tf(...), device_type, rating)} 
@@ -225,7 +226,7 @@ def get_DVPP(IO_dict,
 
     # check if unit fulfills test
     final_rating = reference_rating * scales_rating[0]
-    reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+    reward = -SANCTION_PRICE * price * final_rating  # penalty if not fulfilling requirements
     new_hard_constraints = final_rating * min_hard_constrains   # set hard constraints for plotting
     for scale in scales_rating:
         # the difference curve to check if requirements are fulfilled
@@ -241,7 +242,7 @@ def get_DVPP(IO_dict,
 
     # check if minimum rating is reached
     if final_rating * tol < min_service_rating:
-        reward = -3 * price * final_rating  # penalty if not fulfilling requirements
+        reward = -SANCTION_PRICE * price * final_rating  # penalty if not fulfilling requirements
         new_hard_constraints = scale * reference_rating * min_hard_constrains  # update for failed service
         # print where it failed
         if name_agg=='PV + Wind + BESS':

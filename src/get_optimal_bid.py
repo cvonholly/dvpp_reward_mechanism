@@ -3,7 +3,8 @@ import numpy as np
 
 def get_optimal_bid(bids, ps,
                     max_bid_value=1e10,
-                    return_reward=False):
+                    return_reward=False,
+                    SANCTION_PRICE=3):
     """
     Runs optimization problem to yield the optimal bid value
     by checking only the discrete values present in the bids array.
@@ -21,7 +22,7 @@ def get_optimal_bid(bids, ps,
     def expected_reward(b, p, b_k):
         if b < 0:
             return -np.inf  # invalid bid
-        r_k = np.where(b_k >= b, b, -3 * b)
+        r_k = np.where(b_k >= b, b, -SANCTION_PRICE * b)
         return np.sum(p * r_k)
 
     # check if bids and ps are valid (unchanged)

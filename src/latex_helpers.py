@@ -37,8 +37,8 @@ def df_to_custom_latex(df: pd.DataFrame, caption: str, label: str   , index_map=
     # 6. Build the Data Rows
     data_rows = []
     for index, row in df_latex.iterrows():
-        # Format numbers to 1 decimal place (change :.1f to :.2f if needed)
-        values = " & ".join([f"{x:.1f}" for x in row])
+        # Format numbers to 0 decimal places (change :.0f to :.2f if needed)
+        values = " & ".join([f"{x:.0f}" for x in row])
         row_str = f"    {index} & {values} \\\\"
         data_rows.append(row_str)
     
@@ -46,20 +46,21 @@ def df_to_custom_latex(df: pd.DataFrame, caption: str, label: str   , index_map=
 
     # 7. Construct the Final LaTeX String
     # Using raw strings (r"") to handle backslashes nicely
-    latex_code = f"""\\begin{{table}}[ht]
-  \\centering
-  \\resizebox{{0.5\\textwidth}}{{!}}{{%
-    \\begin{{tabular}}{{{align_str}}}
-    \\toprule
-   {header_row}
-    \\midrule
-{body_content}
-    \\bottomrule
-    \\end{{tabular}}%
-  }}
-  \\vspace{{.1cm}}
-  \\caption{{{caption}}}
-  \\label{{{label}}}
-\\end{{table}}"""
+#     latex_code = f"""\\begin{{table}}[ht]
+#   \\centering
+#   \\resizebox{{0.5\\textwidth}}{{!}}{{%
+#     \\begin{{tabular}}{{{align_str}}}
+#     \\toprule
+#    {header_row}
+#     \\midrule
+# {body_content}
+#     \\bottomrule
+#     \\end{{tabular}}%
+#   }}
+#   \\vspace{{.1cm}}
+#   \\caption{{{caption}}}
+#   \\label{{{label}}}
+# \\end{{table}}"""
+    latex_code = f"{body_content}"
 
     return latex_code

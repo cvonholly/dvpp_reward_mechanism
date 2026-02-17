@@ -9,23 +9,26 @@ from run_case_dvpp_sim_multiprocessing import run_case_dvpp_sim
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
 # --- Configuration Constants (Must be Global) ---
-start_date = pd.to_datetime('2025-04-06 00:00:00')
-end_date = pd.to_datetime('2025-04-12 23:59:59')
+# start_date = pd.to_datetime('2025-04-06 00:00:00')
+# end_date = pd.to_datetime('2025-04-12 23:59:59')
+start_date = pd.to_datetime('2024-09-09 00:00:00')
+end_date = pd.to_datetime('2024-09-15 23:00:00')
 # start_date = pd.to_datetime('2025-06-02 00:00:00')
 # end_date = pd.to_datetime('2025-06-08 23:00:00')
 SAVE_PICS = False   # default: False
 NUMB_WORKERS = 14 # 21  # number of parallel processes
 N_HOURS_TOTAL = (end_date - start_date).days * 24 + (end_date - start_date).seconds // 3600 + 1
 HOUR_CHUNKS = N_HOURS_TOTAL // NUMB_WORKERS   # number of hours per worker
-save_path = 'pics/mp_ilmar_spring/'
+save_path = 'pics/mp_ilmar_autumn/'
 input_service = {'FFR + FCR-D': get_ffr_fcr_d()}   # dict of services to provide
 K_errors = 10      # default: 25  # number of scenarios for the uncertainty
 REL = .1           # scaling factor for device ratings; i.e. 10% of real Ilmar power plant
+SANCTION_PRICE = 3  # penalty multiplier for not fulfilling service. default: 3
 HPF_DC_FACTOR = .25
 WIND_CAP = 216 * REL
 SOLAR_CAP = 150 * REL
-BATTERY_CAP = 25 * REL   # real Ilmar power plant params
-# BATTERY_CAP = 150 * REL   # scaled up battery for better performance
+# BATTERY_CAP = 25 * REL   # real Ilmar power plant params
+BATTERY_CAP = 150 * REL   # scaled up battery for better performance
 BATTERY_ENERGY = BATTERY_CAP * HPF_DC_FACTOR * 4
 
 debug_grand_coalition = False   # save pictures of grand coalition failing to meet service
@@ -42,7 +45,8 @@ config_constants = {
     'BATTERY_CAP': BATTERY_CAP,
     'BATTERY_ENERGY': BATTERY_ENERGY,
     'HPF_DC_FACTOR': HPF_DC_FACTOR,
-    'debug_grand_coalition': debug_grand_coalition
+    'debug_grand_coalition': debug_grand_coalition,
+    'SANCTION_PRICE': SANCTION_PRICE
 }
 
 def get_io_dict():
@@ -110,7 +114,8 @@ if __name__ == '__main__':
         'allow_sub_coalitions': True,
         'HPF_DC_factor': HPF_DC_FACTOR,
         'save_files_internally': False, # Important: Don't write inside workers
-        'debug_grand_coalition': debug_grand_coalition
+        'debug_grand_coalition': debug_grand_coalition,
+        'SANCTION_PRICE': SANCTION_PRICE
     }
 
     # --- 3. Run Multiprocessing ---
