@@ -21,9 +21,11 @@ part of Master Thesis: Reward Mechanisms for DVPPs
 
 5. Run `python dvpp_case_multiprocessing.py`
 
-6. Results are available in `pics/my_results`
-    - `
+6. Output is available in `pics/my_results`
+    - `expected_values_DPF.csv` are the forecasted values
     - `values_DPF.csv` are the realized values
+    - `dvpp_info_DPF_FFR + FCR-D.csv` includes details on dc gain, bid submissions, ... for each time step
+    - `bids_DPF_FFR + FCR-D.csv` includes all bids achieved in the $K$ scnearios
 
 ## Results
 
