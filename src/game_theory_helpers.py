@@ -91,7 +91,8 @@ def game_is_superadditive(v: dict, players: list, tol=5e-4,
 def make_forecasted_realized_superadditive(v: dict, 
                                            v_realized: dict,
                                            players: list,
-                                           print_warnings=False) -> dict:
+                                           print_warnings=False,
+                                           get_coalition_formation=False) -> dict:
     """
     make forecasted game superadditive and aply same formulation for realized game
     this represnts coalition S bidding the optimal (partitions) bids and the getting the realized value
@@ -102,6 +103,10 @@ def make_forecasted_realized_superadditive(v: dict,
         {frozenset -> float}
     players: list of players
     """
+    caolition_value = v[frozenset(players)]  # set grand coalition value
+    current_formed_coalition = [frozenset(players)]  # start with grand coalition formed
+    coalition_formed = {c: 0 for c in powerset(players, exclude_empty=True)}   # empty set for coalition forming
+    coalition_formed[frozenset(players)] = 1  # if no coalitions formed, then grand coalition is formed
     v_superadd = v.copy()
     for S in powerset(players, exclude_empty=True):
         for T in powerset(players, exclude_empty=True):
@@ -111,7 +116,17 @@ def make_forecasted_realized_superadditive(v: dict,
                     if print_warnings: print(f"Making game superadditive for: {S}, {T}")
                     v_superadd[union] = v_superadd[S] + v_superadd[T]
                     v_realized[union] = v_realized[S] + v_realized[T]
-    return v_superadd, v_realized
+                    # update coalition forming if grand coalition is effected
+                    if union == frozenset(players) and v_superadd[S] + v_superadd[T] > caolition_value:
+                        coalition_formed[S] += 1
+                        coalition_formed[T] += 1
+                        for c in current_formed_coalition:
+                            coalition_formed[c] = 0  # update final result
+                            current_formed_coalition = [S, T]  # update current formed coalition
+    if get_coalition_formation:
+        return v_superadd, v_realized, coalition_formed
+    else:
+        return v_superadd, v_realized
 
 def is_superadditive_game(v: dict, players: list, tol=5e-4,
                           print_warnings=False) -> bool:
@@ -409,7 +424,8 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
                        USE_SUB_GAME_METHOD=True,
                        print_warnings=False,
                        MAKE_REALIZED_SUPERADDITIVE=False,
-                       SPLIT_FORECASTED_REALIZED=False) -> pd.DataFrame:
+                       SPLIT_FORECASTED_REALIZED=False,
+                       GET_COALITION_FORMATION=False) -> pd.DataFrame:
     """
     Evaluate full game for forecasted and realized values.
 
@@ -421,6 +437,7 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
     - (optional) print_warnings: Whether to print warnings during processing
     - (optional) MAKE_REALIZED_SUPERADDITIVE: Whether to adjust realized game to be superadditive
     - (optional) SPLIT_FORECASTED_REALIZED: Evaluate forecasted and realized game separately
+    - (optional) GET_COALITION_FORMATION: Whether to return coalition formation data
     Outputs:
     - df: DataFrame with rewards allocated to each player for forecasted and realized values
         - df.index: MultiIndex with levels [Time Index, 'Forecasted'/'Realized', 'Value'/'Reward']
@@ -431,6 +448,7 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
         (may be changed due to superadditive & other parameter adjustments)
     - df_realized: DataFrame with realized values for each coalition
         (may be changed due to superadditive & other parameter adjustments)
+    - dvpp_formation: Set with counts of how many times each DVPP formed coalitions
     """
     # create output df
     index = pd.MultiIndex.from_product([df_forecasted.index.get_level_values(1), ['Forecasted', 'Realized'], ['Value', 'Reward']],)
@@ -439,6 +457,9 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
     players = [c[0] for c in df_forecasted.columns if len(c)==1]  # devices
     columns = players + ['F-Game Type', 'R-Game Type']
     df = pd.DataFrame(pd.NA, index=index, columns=columns)  # all coalition
+
+    # count which dvpps form
+    dvpp_formation = {} # pd.DataFrame(0, index=df_forecasted.index, columns=df_forecasted.columns)
 
     # first check: superadditivity
     df_forecasted_new = pd.DataFrame(0.0, index=df_forecasted.index, columns=df_forecasted.columns, dtype=float)
@@ -450,7 +471,12 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
             v[frozenset()] = 0
             v_realized = {frozenset(k): val for k, val in df_realized.loc[idx].items()}  # create value function
             v_realized[frozenset()] = 0
-            v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
+            if GET_COALITION_FORMATION:
+                v, v_realized, coalition_formation = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings,
+                                                                   get_coalition_formation=GET_COALITION_FORMATION)
+                dvpp_formation[idx] = coalition_formation
+            else:
+                v, v_realized = make_forecasted_realized_superadditive(v, v_realized, players, print_warnings=print_warnings)
             for coalition, val in v.items():
                 if len(coalition)==0:  continue
                 df_forecasted_new.loc[idx, (map_set_to_tuple[coalition],)] = val
@@ -545,4 +571,7 @@ def evaluate_full_game(df_forecasted: pd.DataFrame,
             if SPLIT_FORECASTED_REALIZED:
                 nucleolus = get_least_core_nucleolus(v_realized, players)
                 df.loc[(idx, 'Realized', 'Reward'), list(nucleolus.keys())] = list(nucleolus.values())
+    
+    if GET_COALITION_FORMATION:
+        return df, df_forecasted, df_realized, dvpp_formation
     return df, df_forecasted, df_realized

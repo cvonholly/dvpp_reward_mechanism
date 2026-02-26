@@ -3,23 +3,30 @@ import multiprocessing
 import os
 from functools import partial
 
-# Import your custom modules
 from src.get_required_services import get_fcr_d, get_ffr_fcr, get_ffr_fcr_d
 from run_case_dvpp_sim_multiprocessing import run_case_dvpp_sim
 from src.get_device_systems import get_pv_sys, get_wind_sys, get_bess_io_sys, get_bess_energy_sys
 
+
+"""
+SPECIFY ALL THE FOLLOWING PARAMETERS:
+- set variable `save_path = 'pics/my_results/'`
+- set devices (DERs) and their specifications
+- set other variables (start_date, K_errors, devices, ...) according to your study
+"""
+
 # --- Configuration Constants (Must be Global) ---
 # start_date = pd.to_datetime('2025-04-06 00:00:00')
 # end_date = pd.to_datetime('2025-04-12 23:59:59')
-start_date = pd.to_datetime('2024-09-09 00:00:00')
-end_date = pd.to_datetime('2024-09-15 23:00:00')
-# start_date = pd.to_datetime('2025-06-02 00:00:00')
-# end_date = pd.to_datetime('2025-06-08 23:00:00')
+# start_date = pd.to_datetime('2024-09-09 00:00:00')
+# end_date = pd.to_datetime('2024-09-15 23:00:00')
+start_date = pd.to_datetime('2025-06-02 00:00:00')
+end_date = pd.to_datetime('2025-06-08 23:00:00')
 SAVE_PICS = False   # default: False
 NUMB_WORKERS = 14 # 21  # number of parallel processes
 N_HOURS_TOTAL = (end_date - start_date).days * 24 + (end_date - start_date).seconds // 3600 + 1
 HOUR_CHUNKS = N_HOURS_TOTAL // NUMB_WORKERS   # number of hours per worker
-save_path = 'pics/mp_ilmar_autumn/'
+save_path = 'pics/mp_ilmar_summer/'
 input_service = {'FFR + FCR-D': get_ffr_fcr_d()}   # dict of services to provide
 K_errors = 10      # default: 25  # number of scenarios for the uncertainty
 REL = .1           # scaling factor for device ratings; i.e. 10% of real Ilmar power plant
@@ -33,6 +40,14 @@ BATTERY_ENERGY = BATTERY_CAP * HPF_DC_FACTOR * 4
 
 debug_grand_coalition = False   # save pictures of grand coalition failing to meet service
 
+# specify devices /  DERs
+def get_io_dict():
+    """Helper function to define system I/O (Global for pickling)"""
+    return {
+        'PV': (get_pv_sys(), 'lpf', SOLAR_CAP),
+        'Wind': (get_wind_sys(), 'lpf', WIND_CAP),
+        'BESS': (get_bess_energy_sys(e_max=BATTERY_ENERGY), 'hpf', BATTERY_CAP),
+    }
 
 # save these configuration constants into save_path for recrod keeping
 config_constants = {
@@ -49,13 +64,9 @@ config_constants = {
     'SANCTION_PRICE': SANCTION_PRICE
 }
 
-def get_io_dict():
-    """Helper function to define system I/O (Global for pickling)"""
-    return {
-        'PV': (get_pv_sys(), 'lpf', SOLAR_CAP),
-        'Wind': (get_wind_sys(), 'lpf', WIND_CAP),
-        'BESS': (get_bess_energy_sys(e_max=BATTERY_ENERGY), 'hpf', BATTERY_CAP),
-    }
+"""
+THIS CODE WILL BE RUN IN PARALLEL
+"""
 
 def run_simulation_chunk(time_chunk, common_kwargs):
     """Worker function for multiprocessing."""
